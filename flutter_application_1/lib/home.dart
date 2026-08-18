@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'overlay_endereco.dart';
 import 'adicionar_veiculo_screen.dart';
-import 'solicitar_resgate_screen.dart';
+import 'solicitar_servico_screen.dart';
+import 'perfil_cliente_screen.dart';
 
 void main() {
   runApp(const HookApp());
@@ -39,55 +40,35 @@ class _HomeScreenState extends State<HomeScreen> {
   static const Color cinzaTexto = Color(0xFF8A8A8A);
   static const Color cinzaFundo = Color(0xFFF5F5F5);
 
-  int _tabSelecionada = 0;
   int _navSelecionado = 0;
   int _tipoReboque = 0;
   int _veiculoSelecionado = 0;
   String _enderecoAtual = 'Av. Paulista, 1200';
   LatLng? _coordenadaAtual;
 
-  late final PageController _pageController = PageController();
-
+  // TODO: isso ainda é mockado — troque por ApiService.instance.listarVeiculos()
+  // quando integrar essa tela (o 'id' abaixo é só placeholder pra o app
+  // compilar e testar o fluxo; troque pelos ids reais vindos da API).
   final List<Map<String, String>> _veiculos = [
-    {'nome': 'Toyota Corolla', 'placa': 'BRA-2E19', 'cor': 'Prata', 'ano': '2022'},
-    {'nome': 'Jeep Renegade', 'placa': 'ABC-1234', 'cor': 'Preto', 'ano': '2021'},
-  ];
-
-  final List<Map<String, dynamic>> _problemasFrequentes = [
-    {
-      'icone': Icons.tire_repair_rounded,
-      'titulo': 'Pneu Furado',
-      'subtitulo': 'Como solicitar a troca ou reparo',
-      'seta': false,
-    },
-    {
-      'icone': Icons.local_gas_station_rounded,
-      'titulo': 'Falta de Combustível',
-      'subtitulo': 'Auxílio para pane seca',
-      'seta': false,
-    },
-    {
-      'icone': Icons.battery_charging_full_rounded,
-      'titulo': 'Bateria Descarregada',
-      'subtitulo': 'Carga auxiliar e diagnóstico rápido',
-      'seta': false,
-    },
-    {
-      'icone': Icons.access_time_rounded,
-      'titulo': 'Outros',
-      'subtitulo': 'Descreva a ajuda necessária',
-      'seta': true,
-    },
+    {'id': '1', 'nome': 'Toyota Corolla', 'placa': 'BRA-2E19', 'cor': 'Prata', 'ano': '2022'},
+    {'id': '2', 'nome': 'Jeep Renegade', 'placa': 'ABC-1234', 'cor': 'Preto', 'ano': '2021'},
   ];
 
   @override
   void dispose() {
-    _pageController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_navSelecionado == 3) {
+      return Scaffold(
+        backgroundColor: Colors.white,
+        body: const SafeArea(child: PerfilClienteScreen()),
+        bottomNavigationBar: _buildBottomNav(),
+      );
+    }
+
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
@@ -115,37 +96,14 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 20),
                   const Divider(color: Color(0xFFEEEEEE), thickness: 1),
-                  const SizedBox(height: 16),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    child: Row(
-                      children: [
-                        Expanded(child: _buildTab('Resgate', 0)),
-                        Expanded(child: _buildTab('Ajuda', 1)),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 20),
                 ],
               ),
             ),
             Expanded(
-              child: PageView(
-                controller: _pageController,
-                physics: const ClampingScrollPhysics(),
-                onPageChanged: (index) {
-                  setState(() => _tabSelecionada = index);
-                },
-                children: [
-                  SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: _buildConteudoResgate(),
-                  ),
-                  SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: _buildConteudoAjuda(),
-                  ),
-                ],
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: _buildConteudoResgate(),
               ),
             ),
             _buildBottomNav(),
@@ -457,14 +415,17 @@ class _HomeScreenState extends State<HomeScreen> {
                   const LatLng(-23.5650, -46.6520);
               final tiposReboque = ['Guincho Leve', 'Guincho Pesado'];
               final veiculo = _veiculos[_veiculoSelecionado]['nome'] ?? 'Veículo';
+              final veiculoId = int.parse(_veiculos[_veiculoSelecionado]['id']!);
+              final servico = tiposDeReboque[tiposReboque[_tipoReboque]]!;
               Navigator.push(
                 context,
                 MaterialPageRoute(
                   builder: (_) => ResumoServicoScreen(
+                    servico: servico,
                     endereco: _enderecoAtual,
                     coordenada: coordenada,
-                    tipoReboque: tiposReboque[_tipoReboque],
                     veiculo: veiculo,
+                    veiculoId: veiculoId,
                   ),
                 ),
               );
@@ -488,248 +449,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
         const SizedBox(height: 24),
       ],
-    );
-  }
-
-  Widget _buildConteudoAjuda() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Como podemos ajudar?',
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
-            color: pretoPrincipal,
-            letterSpacing: -0.4,
-          ),
-        ),
-
-        const SizedBox(height: 20),
-
-        const Text(
-          'Problemas Frequentes',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: pretoPrincipal,
-          ),
-        ),
-
-        const SizedBox(height: 12),
-
-        ...List.generate(_problemasFrequentes.length, (index) {
-          final item = _problemasFrequentes[index];
-          return Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFE5E5E5), width: 1.2),
-            ),
-            child: ListTile(
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              leading: Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: cinzaFundo,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(item['icone'] as IconData,
-                    color: pretoPrincipal, size: 22),
-              ),
-              title: Text(
-                item['titulo'] as String,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: pretoPrincipal,
-                ),
-              ),
-              subtitle: Text(
-                item['subtitulo'] as String,
-                style: const TextStyle(fontSize: 13, color: cinzaTexto),
-              ),
-              trailing: item['seta'] == true
-                  ? const Icon(Icons.chevron_right_rounded,
-                      color: cinzaTexto, size: 22)
-                  : null,
-              onTap: () {},
-            ),
-          );
-        }),
-
-        const SizedBox(height: 24),
-
-        const Text(
-          'Veículo para Resgate',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: pretoPrincipal,
-            letterSpacing: -0.3,
-          ),
-        ),
-
-        const SizedBox(height: 12),
-
-        const Text(
-          'VEÍCULO SALVO',
-          style: TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w700,
-            color: cinzaTexto,
-            letterSpacing: 1.2,
-          ),
-        ),
-
-        const SizedBox(height: 10),
-
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          decoration: BoxDecoration(
-            color: cinzaFundo,
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 46,
-                height: 46,
-                decoration: BoxDecoration(
-                  color: azulPrincipal.withOpacity(0.13),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(Icons.directions_car_rounded,
-                    color: azulPrincipal, size: 24),
-              ),
-              const SizedBox(width: 14),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
-                  Text(
-                    'Toyota Corolla',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: pretoPrincipal,
-                    ),
-                  ),
-                  SizedBox(height: 3),
-                  Text(
-                    'Placa: BRA2E19 • Cor: Prata',
-                    style: TextStyle(fontSize: 13, color: cinzaTexto),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 12),
-
-        // ✅ Corrigido: abre AdicionarVeiculoScreen em vez do overlay
-        GestureDetector(
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                  builder: (_) => const AdicionarVeiculoScreen()),
-            );
-          },
-          child: Row(
-            children: [
-              Container(
-                width: 46,
-                height: 46,
-                decoration: BoxDecoration(
-                  color: pretoPrincipal,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(Icons.add_rounded,
-                    color: Colors.white, size: 24),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
-                    Text(
-                      'Adicionar Novo Veículo',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: cinzaTexto,
-                      ),
-                    ),
-                    SizedBox(height: 3),
-                    Text(
-                      'Para resgate de outro automóvel',
-                      style: TextStyle(fontSize: 13, color: cinzaTexto),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(Icons.chevron_right_rounded,
-                  color: cinzaTexto, size: 22),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 24),
-      ],
-    );
-  }
-
-  Widget _buildTab(String label, int index) {
-    final ativo = _tabSelecionada == index;
-    return GestureDetector(
-      onTap: () {
-        setState(() => _tabSelecionada = index);
-        _pageController.animateToPage(
-          index,
-          duration: const Duration(milliseconds: 400),
-          curve: Curves.fastOutSlowIn,
-        );
-      },
-      child: AnimatedOpacity(
-        opacity: ativo ? 1.0 : 0.5,
-        duration: const Duration(milliseconds: 200),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          child: Stack(
-            clipBehavior: Clip.none,
-            alignment: Alignment.center,
-            children: [
-              Positioned(
-                bottom: -8,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  height: 4,
-                  width: ativo ? 120 : 0,
-                  decoration: const BoxDecoration(
-                    color: pretoPrincipal,
-                    borderRadius: BorderRadius.only(
-                      bottomLeft: Radius.circular(2),
-                      bottomRight: Radius.circular(2),
-                    ),
-                  ),
-                ),
-              ),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: ativo ? FontWeight.w700 : FontWeight.w500,
-                  color: pretoPrincipal,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 

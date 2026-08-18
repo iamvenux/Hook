@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'criar_conta_screen.dart';
 import 'esqueci_senha_screen.dart';
 import 'home.dart';
+import 'home_socorrista_screen.dart';
+import 'api_service.dart';
 
 void main() {
   runApp(const HookApp());
@@ -55,14 +57,39 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _carregando = true);
 
-    await Future.delayed(const Duration(seconds: 2)); // Simulação
+    final email = _emailController.text.trim();
+    final senha = _senhaController.text.trim();
 
-    setState(() => _carregando = false);
+    try {
+      final usuario = await ApiService.instance.login(email: email, senha: senha);
 
-    if (mounted) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const HomeScreen()),
+      if (!mounted) return;
+      setState(() => _carregando = false);
+
+      if (usuario['tipo'] == 'motorista') {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const HomeSocorristaScreen()),
+        );
+      } else {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const HomeScreen()),
+        );
+      }
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _carregando = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.mensagem)),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _carregando = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Não foi possível conectar ao servidor. Verifique sua conexão.'),
+        ),
       );
     }
   }
@@ -283,7 +310,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   },
                 ),
 
-                const SizedBox(height: 32),
+                const SizedBox(height: 24),
 
                 SizedBox(
                   width: double.infinity,
