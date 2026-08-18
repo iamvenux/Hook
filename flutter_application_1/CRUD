@@ -1,0 +1,272 @@
+type: collection.insomnia.rest/5.0
+schema_version: "5.1"
+name: My Collection
+meta:
+  id: wrk_384dbd7f53e64fada6621602663e2a5c
+  created: 1787076058010
+  modified: 1787076058010
+  description: ""
+collection:
+  - url: http://localhost/flutter_application_1/backend/api/login.php
+    name: Login
+    meta:
+      id: req_ab1ceb922a564a46ade805e8def3d2c2
+      created: 1787076065162
+      modified: 1787077259897
+      isPrivate: false
+      description: ""
+      sortKey: -1787076065162
+    method: POST
+    body:
+      mimeType: application/json
+      text: |-
+        {
+          "email": "cliente@hook.com",
+          "senha": "123456"
+        }
+    headers:
+      - name: Content-Type
+        value: application/json
+    settings:
+      renderRequestBody: true
+      encodeUrl: true
+      followRedirects: global
+      cookies:
+        send: true
+        store: true
+      rebuildPath: true
+  - url: http://localhost/flutter_application_1/backend/api/criar_solicitacao.php
+    name: Solicitação
+    meta:
+      id: req_772fdf08357f4e96a0d4222514ca58a9
+      created: 1787076681240
+      modified: 1787077307116
+      isPrivate: false
+      description: ""
+      sortKey: -1787076681240
+    method: POST
+    body:
+      mimeType: application/json
+      text: |-
+        {
+          "cliente_id": 1,
+          "veiculo_id": 1,
+          "tipo_reboque": "Guincho Leve",
+          "forma_pagamento": "Pix",
+          "endereco": "Av. Paulista, 1200",
+          "latitude": -23.565,
+          "longitude": -46.652,
+          "valor_estimado": 350
+        }
+    headers:
+      - name: Content-Type
+        value: application/json
+    settings:
+      renderRequestBody: true
+      encodeUrl: true
+      followRedirects: global
+      cookies:
+        send: true
+        store: true
+      rebuildPath: true
+  - url: http://localhost/flutter_application_1/backend/api/buscar_solicitacoes.php?motorista_id=2
+    name: Buscando
+    meta:
+      id: req_65b90f5259414f62b0def20ed3c083fc
+      created: 1787077308886
+      modified: 1787077555364
+      isPrivate: false
+      description: ""
+      sortKey: -1787077308886
+    method: GET
+    body:
+      mimeType: application/json
+      text: |-
+        {
+          "solicitacao_id": 2,
+          "motorista_id": 2
+        }
+    headers:
+      - name: Content-Type
+        value: application/json
+    settings:
+      renderRequestBody: true
+      encodeUrl: true
+      followRedirects: global
+      cookies:
+        send: true
+        store: true
+      rebuildPath: true
+  - url: http://localhost/flutter_application_1/backend/api/aceitar_solicitacao.php
+    name: Motorista Aceita
+    meta:
+      id: req_10d10015776749e888bad0367fad7820
+      created: 1787077557005
+      modified: 1787078499676
+      isPrivate: false
+      description: ""
+      sortKey: -1787077557005
+    method: POST
+    body:
+      mimeType: application/json
+      text: |-
+        {
+          "solicitacao_id": 1,
+          "motorista_id": 2
+        }
+    headers:
+      - name: Content-Type
+        value: application/json
+    settings:
+      renderRequestBody: true
+      encodeUrl: true
+      followRedirects: global
+      cookies:
+        send: true
+        store: true
+      rebuildPath: true
+  - url: http://localhost/flutter_application_1/backend/api/consultar_solicitacao.php?solicitacao_id=1
+    name: Usuário Recebe Confirmação
+    meta:
+      id: req_73838f874a5b49468e3972dc949eb8bc
+      created: 1787077697651
+      modified: 1787078517503
+      isPrivate: false
+      description: ""
+      sortKey: -1787077697651
+    method: GET
+    settings:
+      renderRequestBody: true
+      encodeUrl: true
+      followRedirects: global
+      cookies:
+        send: true
+        store: true
+      rebuildPath: true
+  - url: http://localhost/flutter_application_1/backend/api/atualizar_localizacao.php
+    name: Atualizar Localização Em Tempo Real
+    meta:
+      id: req_22077ace3bb64156bf6b63cafa51c3cd
+      created: 1787079460950
+      modified: 1787079675086
+      isPrivate: false
+      description: ""
+      sortKey: -1787079460950
+    method: POST
+    body:
+      mimeType: application/json
+      text: |-
+        {
+          "motorista_id": 2,
+          "latitude": -23.5291,
+          "longitude": -47.1354
+        }
+    headers:
+      - name: Content-Type
+        value: application/json
+    settings:
+      renderRequestBody: true
+      encodeUrl: true
+      followRedirects: global
+      cookies:
+        send: true
+        store: true
+      rebuildPath: true
+  - url: http://localhost/flutter_application_1/backend/api/atualizar_disponibilidade.php
+    name: Conferir Disponibilidade Motorista
+    meta:
+      id: req_67ecb1d4a9f144c18f37ca5eb939f79d
+      created: 1787079485877
+      modified: 1787079689770
+      isPrivate: false
+      description: ""
+      sortKey: -1787079485877
+    method: POST
+    body:
+      mimeType: application/json
+      text: |-
+        {
+          "motorista_id": 2,
+          "disponivel": 1
+        }
+    headers:
+      - name: Content-Type
+        value: application/json
+    settings:
+      renderRequestBody: true
+      encodeUrl: true
+      followRedirects: global
+      cookies:
+        send: true
+        store: true
+      rebuildPath: true
+  - url: http://localhost/flutter_application_1/backend/api/adicionar_veiculo.php
+    name: Adicionar Veículo
+    meta:
+      id: req_58a03040fef6429cb63236d32f51fc55
+      created: 1787080550486
+      modified: 1787081901275
+      isPrivate: false
+      description: ""
+      sortKey: -1787080550486
+    method: POST
+    body:
+      mimeType: application/json
+      text: |-
+        {
+          "usuario_id": 1,
+          "tipo": "Carro",
+          "marca": "Honda",
+          "modelo": "Civic",
+          "ano": 2021,
+          "placa": "ABC1D23",
+          "cor": "Preto"
+        }
+    headers:
+      - name: Content-Type
+        value: application/json
+    settings:
+      renderRequestBody: true
+      encodeUrl: true
+      followRedirects: global
+      cookies:
+        send: true
+        store: true
+      rebuildPath: true
+  - url: http://localhost/flutter_application_1/backend/api/listar_veiculos.php?usuario_id=1
+    name: Listar Veículos
+    meta:
+      id: req_366ed71fbfc54be48511655767451d9c
+      created: 1787080663606
+      modified: 1787081911704
+      isPrivate: false
+      description: ""
+      sortKey: -1787080663606
+    method: GET
+    body:
+      mimeType: application/json
+      text: ""
+    headers:
+      - name: Content-Type
+        value: application/json
+    settings:
+      renderRequestBody: true
+      encodeUrl: true
+      followRedirects: global
+      cookies:
+        send: true
+        store: true
+      rebuildPath: true
+cookieJar:
+  name: Default Jar
+  meta:
+    id: jar_05760c44e1152875311b410fe9e7f8e347be4489
+    created: 1787076058012
+    modified: 1787076058012
+environments:
+  name: Base Environment
+  meta:
+    id: env_05760c44e1152875311b410fe9e7f8e347be4489
+    created: 1787076058011
+    modified: 1787076058011
+    isPrivate: false
