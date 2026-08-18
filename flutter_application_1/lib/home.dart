@@ -1,111 +1,258 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+
 import 'overlay_endereco.dart';
 import 'adicionar_veiculo_screen.dart';
 import 'solicitar_servico_screen.dart';
 import 'perfil_cliente_screen.dart';
-
-void main() {
-  runApp(const HookApp());
-}
-
-class HookApp extends StatelessWidget {
-  const HookApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Hook',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF1A7EF5)),
-        useMaterial3: true,
-        fontFamily: 'Roboto',
-      ),
-      home: const HomeScreen(),
-    );
-  }
-}
+import 'api_service.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({
+    super.key,
+  });
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  State<HomeScreen> createState() =>
+      _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
-  static const Color azulPrincipal = Color(0xFF1A7EF5);
-  static const Color pretoPrincipal = Color(0xFF1A1A1A);
-  static const Color cinzaTexto = Color(0xFF8A8A8A);
-  static const Color cinzaFundo = Color(0xFFF5F5F5);
+class _HomeScreenState
+    extends State<HomeScreen> {
+  static const Color azulPrincipal =
+      Color(0xFF1A7EF5);
+
+  static const Color pretoPrincipal =
+      Color(0xFF1A1A1A);
+
+  static const Color cinzaTexto =
+      Color(0xFF8A8A8A);
+
+  static const Color cinzaFundo =
+      Color(0xFFF5F5F5);
 
   int _navSelecionado = 0;
+
   int _tipoReboque = 0;
+
   int _veiculoSelecionado = 0;
-  String _enderecoAtual = 'Av. Paulista, 1200';
+
+  String _enderecoAtual =
+      'Av. Paulista, 1200';
+
   LatLng? _coordenadaAtual;
 
-  // TODO: isso ainda é mockado — troque por ApiService.instance.listarVeiculos()
-  // quando integrar essa tela (o 'id' abaixo é só placeholder pra o app
-  // compilar e testar o fluxo; troque pelos ids reais vindos da API).
-  final List<Map<String, String>> _veiculos = [
-    {'id': '1', 'nome': 'Toyota Corolla', 'placa': 'BRA-2E19', 'cor': 'Prata', 'ano': '2022'},
-    {'id': '2', 'nome': 'Jeep Renegade', 'placa': 'ABC-1234', 'cor': 'Preto', 'ano': '2021'},
-  ];
+  bool _carregandoVeiculos = true;
+
+  bool _erroVeiculos = false;
+
+  List<Map<String, dynamic>>
+      _veiculos = [];
+
+  // ============================================================
+  // INIT
+  // ============================================================
 
   @override
-  void dispose() {
-    super.dispose();
+  void initState() {
+    super.initState();
+
+    _carregarVeiculos();
   }
 
+  // ============================================================
+  // CARREGAR VEÍCULOS DO BANCO
+  // ============================================================
+
+  Future<void> _carregarVeiculos() async {
+    if (mounted) {
+      setState(() {
+        _carregandoVeiculos = true;
+        _erroVeiculos = false;
+      });
+    }
+
+    try {
+      final lista =
+          await ApiService.instance
+              .listarVeiculos();
+
+      if (!mounted) return;
+
+      setState(() {
+        _veiculos = lista;
+
+        _carregandoVeiculos = false;
+
+        _erroVeiculos = false;
+
+        if (_veiculos.isEmpty) {
+          _veiculoSelecionado = 0;
+        } else if (_veiculoSelecionado >=
+            _veiculos.length) {
+          _veiculoSelecionado = 0;
+        }
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _carregandoVeiculos = false;
+        _erroVeiculos = true;
+      });
+
+      ScaffoldMessenger.of(context)
+          .showSnackBar(
+        SnackBar(
+          content: Text(
+            e.mensagem,
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _carregandoVeiculos = false;
+        _erroVeiculos = true;
+      });
+
+      ScaffoldMessenger.of(context)
+          .showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Não foi possível carregar os veículos.',
+          ),
+        ),
+      );
+    }
+  }
+
+  // ============================================================
+  // ABRIR TELA PARA ADICIONAR
+  // ============================================================
+
+  Future<void> _abrirAdicionarVeiculo() async {
+    final resultado =
+        await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            const AdicionarVeiculoScreen(),
+      ),
+    );
+
+    if (!mounted) return;
+
+    // A tela retorna true quando
+    // o veículo é salvo com sucesso.
+    if (resultado == true) {
+      await _carregarVeiculos();
+    }
+  }
+
+  // ============================================================
+  // BUILD
+  // ============================================================
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     if (_navSelecionado == 3) {
       return Scaffold(
-        backgroundColor: Colors.white,
-        body: const SafeArea(child: PerfilClienteScreen()),
-        bottomNavigationBar: _buildBottomNav(),
+        backgroundColor:
+            Colors.white,
+        body: const SafeArea(
+          child:
+              PerfilClienteScreen(),
+        ),
+        bottomNavigationBar:
+            _buildBottomNav(),
       );
     }
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor:
+          Colors.white,
       body: SafeArea(
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment:
+              CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(24, 32, 24, 0),
+              padding:
+                  const EdgeInsets
+                      .fromLTRB(
+                24,
+                32,
+                24,
+                0,
+              ),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
                 children: [
                   const Text(
                     'Seja Bem-vindo(a)',
-                    style: TextStyle(
+                    style:
+                        TextStyle(
                       fontSize: 26,
-                      fontWeight: FontWeight.bold,
-                      color: pretoPrincipal,
-                      letterSpacing: -0.5,
+                      fontWeight:
+                          FontWeight.bold,
+                      color:
+                          pretoPrincipal,
+                      letterSpacing:
+                          -0.5,
                     ),
                   ),
-                  const SizedBox(height: 4),
+
+                  const SizedBox(
+                    height: 4,
+                  ),
+
                   const Text(
                     'Como posso te ajudar hoje ?',
-                    style: TextStyle(fontSize: 14, color: cinzaTexto),
+                    style:
+                        TextStyle(
+                      fontSize: 14,
+                      color:
+                          cinzaTexto,
+                    ),
                   ),
-                  const SizedBox(height: 20),
-                  const Divider(color: Color(0xFFEEEEEE), thickness: 1),
-                  const SizedBox(height: 20),
+
+                  const SizedBox(
+                    height: 20,
+                  ),
+
+                  const Divider(
+                    color:
+                        Color(
+                      0xFFEEEEEE,
+                    ),
+                    thickness: 1,
+                  ),
+
+                  const SizedBox(
+                    height: 20,
+                  ),
                 ],
               ),
             ),
+
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: _buildConteudoResgate(),
+              child:
+                  SingleChildScrollView(
+                padding:
+                    const EdgeInsets
+                        .symmetric(
+                  horizontal: 24,
+                ),
+                child:
+                    _buildConteudoResgate(),
               ),
             ),
+
             _buildBottomNav(),
           ],
         ),
@@ -113,92 +260,188 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // ============================================================
+  // CONTEÚDO PRINCIPAL
+  // ============================================================
+
   Widget _buildConteudoResgate() {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment:
+          CrossAxisAlignment.start,
       children: [
-        // Card Localização
+        // ======================================================
+        // LOCALIZAÇÃO
+        // ======================================================
+
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          decoration: BoxDecoration(
+          padding:
+              const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 14,
+          ),
+          decoration:
+              BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: azulPrincipal, width: 1.5),
+            borderRadius:
+                BorderRadius.circular(
+              14,
+            ),
+            border: Border.all(
+              color:
+                  azulPrincipal,
+              width:
+                  1.5,
+            ),
           ),
           child: Row(
             children: [
               Container(
                 width: 42,
                 height: 42,
-                decoration: BoxDecoration(
-                  color: azulPrincipal.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(10),
+                decoration:
+                    BoxDecoration(
+                  color:
+                      azulPrincipal
+                          .withValues(
+                    alpha: 0.12,
+                  ),
+                  borderRadius:
+                      BorderRadius
+                          .circular(
+                    10,
+                  ),
                 ),
-                child: const Icon(Icons.location_on_rounded,
-                    color: azulPrincipal, size: 22),
+                child:
+                    const Icon(
+                  Icons
+                      .location_on_rounded,
+                  color:
+                      azulPrincipal,
+                  size: 22,
+                ),
               ),
-              const SizedBox(width: 12),
+
+              const SizedBox(
+                width: 12,
+              ),
+
               Expanded(
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
                   children: [
                     const Text(
                       'PONTO DE ENCONTRO',
-                      style: TextStyle(
+                      style:
+                          TextStyle(
                         fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        color: cinzaTexto,
-                        letterSpacing: 0.8,
+                        fontWeight:
+                            FontWeight
+                                .w700,
+                        color:
+                            cinzaTexto,
+                        letterSpacing:
+                            0.8,
                       ),
                     ),
-                    const SizedBox(height: 3),
+
+                    const SizedBox(
+                      height: 3,
+                    ),
+
                     Text(
                       _enderecoAtual,
-                      style: const TextStyle(
+                      style:
+                          const TextStyle(
                         fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: azulPrincipal,
+                        fontWeight:
+                            FontWeight
+                                .w600,
+                        color:
+                            azulPrincipal,
                       ),
                     ),
                   ],
                 ),
               ),
+
               GestureDetector(
                 onTap: () async {
-                  final resultado = await showGeneralDialog<dynamic>(
-                    context: context,
-                    barrierDismissible: false,
-                    barrierColor: Colors.transparent,
-                    transitionDuration: Duration.zero,
-                    pageBuilder: (_, __, ___) => EnderecoOverlay(
-                      enderecoAtual: _enderecoAtual,
-                      coordenadaAtual: _coordenadaAtual,
+                  final resultado =
+                      await showGeneralDialog<
+                          dynamic>(
+                    context:
+                        context,
+                    barrierDismissible:
+                        false,
+                    barrierColor:
+                        Colors.transparent,
+                    transitionDuration:
+                        Duration.zero,
+                    pageBuilder:
+                        (_, _, _) =>
+                            EnderecoOverlay(
+                      enderecoAtual:
+                          _enderecoAtual,
+                      coordenadaAtual:
+                          _coordenadaAtual,
                     ),
                   );
-                  if (resultado != null && mounted) {
-                    final r = resultado as Map<String, dynamic>;
+
+                  if (resultado !=
+                          null &&
+                      mounted) {
+                    final r =
+                        resultado
+                            as Map<
+                                String,
+                                dynamic>;
+
                     setState(() {
-                      _enderecoAtual = r['endereco'] as String;
-                      _coordenadaAtual = LatLng(
-                        r['lat'] as double,
-                        r['lng'] as double,
+                      _enderecoAtual =
+                          r['endereco']
+                              as String;
+
+                      _coordenadaAtual =
+                          LatLng(
+                        (r['lat']
+                                as num)
+                            .toDouble(),
+                        (r['lng']
+                                as num)
+                            .toDouble(),
                       );
                     });
                   }
                 },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: pretoPrincipal,
-                    borderRadius: BorderRadius.circular(20),
+                  padding:
+                      const EdgeInsets
+                          .symmetric(
+                    horizontal: 14,
+                    vertical: 8,
                   ),
-                  child: const Text(
+                  decoration:
+                      BoxDecoration(
+                    color:
+                        pretoPrincipal,
+                    borderRadius:
+                        BorderRadius
+                            .circular(
+                      20,
+                    ),
+                  ),
+                  child:
+                      const Text(
                     'Mudar',
-                    style: TextStyle(
-                      color: Colors.white,
+                    style:
+                        TextStyle(
+                      color:
+                          Colors.white,
                       fontSize: 13,
-                      fontWeight: FontWeight.w600,
+                      fontWeight:
+                          FontWeight
+                              .w600,
                     ),
                   ),
                 ),
@@ -207,290 +450,684 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
 
-        const SizedBox(height: 24),
+        const SizedBox(
+          height: 24,
+        ),
 
-        // Seção Veículos
+        // ======================================================
+        // CABEÇALHO VEÍCULOS
+        // ======================================================
+
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          mainAxisAlignment:
+              MainAxisAlignment
+                  .spaceBetween,
           children: [
             const Text(
               'SEU VEÍCULO',
-              style: TextStyle(
+              style:
+                  TextStyle(
                 fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: cinzaTexto,
-                letterSpacing: 1.2,
+                fontWeight:
+                    FontWeight.w700,
+                color:
+                    cinzaTexto,
+                letterSpacing:
+                    1.2,
               ),
             ),
+
             GestureDetector(
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const AdicionarVeiculoScreen()),
-                );
-              },
-              child: const Text(
+              onTap:
+                  _abrirAdicionarVeiculo,
+              child:
+                  const Text(
                 '+ ADICIONAR NOVO',
-                style: TextStyle(
+                style:
+                    TextStyle(
                   fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: azulPrincipal,
-                  letterSpacing: 0.8,
+                  fontWeight:
+                      FontWeight
+                          .w700,
+                  color:
+                      azulPrincipal,
+                  letterSpacing:
+                      0.8,
                 ),
               ),
             ),
           ],
         ),
 
-        const SizedBox(height: 12),
-
-        LayoutBuilder(
-          builder: (context, constraints) {
-            // Calcula largura real de cada card (metade da largura disponível menos o espaçamento)
-            final cardWidth = (constraints.maxWidth - 12) / 2;
-            // Altura mínima de 148px para comportar todo o conteúdo em telas pequenas
-            final cardHeight = cardWidth.clamp(148.0, 190.0);
-            return GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: cardWidth / cardHeight,
-              ),
-              itemCount: _veiculos.length,
-              itemBuilder: (context, index) {
-                final v = _veiculos[index];
-                final selecionado = _veiculoSelecionado == index;
-                return GestureDetector(
-                  onTap: () => setState(() => _veiculoSelecionado = index),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: selecionado
-                          ? pretoPrincipal
-                          : const Color(0xFFF0F0F0),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              width: 36,
-                              height: 36,
-                              decoration: BoxDecoration(
-                                color: selecionado
-                                    ? Colors.white.withOpacity(0.15)
-                                    : Colors.white,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Icon(
-                                Icons.directions_car_rounded,
-                                color: selecionado ? Colors.white : pretoPrincipal,
-                                size: 20,
-                              ),
-                            ),
-                            if (index == 0)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 7, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: azulPrincipal,
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: const Text(
-                                  'PADRÃO',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 0.3,
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                        const Spacer(),
-                        Text(
-                          v['nome']!,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: selecionado ? Colors.white : pretoPrincipal,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          v['placa']!,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: selecionado
-                                ? Colors.white.withOpacity(0.6)
-                                : cinzaTexto,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.circle,
-                              size: 7,
-                              color: selecionado
-                                  ? Colors.white.withOpacity(0.5)
-                                  : cinzaTexto,
-                            ),
-                            const SizedBox(width: 5),
-                            Expanded(
-                              child: Text(
-                                '${v['cor']} • ${v['ano']}',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: selecionado
-                                      ? Colors.white.withOpacity(0.6)
-                                      : cinzaTexto,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            );
-          },
+        const SizedBox(
+          height: 12,
         ),
 
-        const SizedBox(height: 24),
+        // ======================================================
+        // VEÍCULOS
+        // ======================================================
 
-        // Tipo de Reboque
+        _buildVeiculos(),
+
+        const SizedBox(
+          height: 24,
+        ),
+
+        // ======================================================
+        // TIPO DE REBOQUE
+        // ======================================================
+
         const Text(
           'TIPO DE REBOQUE',
-          style: TextStyle(
+          style:
+              TextStyle(
             fontSize: 11,
-            fontWeight: FontWeight.w700,
-            color: cinzaTexto,
-            letterSpacing: 1.2,
+            fontWeight:
+                FontWeight.w700,
+            color:
+                cinzaTexto,
+            letterSpacing:
+                1.2,
           ),
         ),
-        const SizedBox(height: 12),
+
+        const SizedBox(
+          height: 12,
+        ),
+
         Row(
           children: [
             Expanded(
-              child: _buildTipoReboque(0, Icons.local_shipping_rounded,
-                  'Guincho Leve', 'Até 3.5 toneladas'),
+              child:
+                  _buildTipoReboque(
+                0,
+                Icons
+                    .local_shipping_rounded,
+                'Guincho Leve',
+                'Até 3.5 toneladas',
+              ),
             ),
-            const SizedBox(width: 12),
+
+            const SizedBox(
+              width: 12,
+            ),
+
             Expanded(
-              child: _buildTipoReboque(1, Icons.rv_hookup_rounded,
-                  'Guincho Pesado', 'Caminhões e ônibus'),
+              child:
+                  _buildTipoReboque(
+                1,
+                Icons
+                    .rv_hookup_rounded,
+                'Guincho Pesado',
+                'Caminhões e ônibus',
+              ),
             ),
           ],
         ),
 
-        const SizedBox(height: 28),
+        const SizedBox(
+          height: 28,
+        ),
 
-        // Botão Solicitar
+        // ======================================================
+        // SOLICITAR RESGATE
+        // ======================================================
+
         SizedBox(
-          width: double.infinity,
+          width:
+              double.infinity,
           height: 56,
-          child: ElevatedButton(
-            onPressed: () {
-              // Usa coordenada salva ou fallback para São Paulo centro
-              final coordenada = _coordenadaAtual ??
-                  const LatLng(-23.5650, -46.6520);
-              final tiposReboque = ['Guincho Leve', 'Guincho Pesado'];
-              final veiculo = _veiculos[_veiculoSelecionado]['nome'] ?? 'Veículo';
-              final veiculoId = int.parse(_veiculos[_veiculoSelecionado]['id']!);
-              final servico = tiposDeReboque[tiposReboque[_tipoReboque]]!;
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => ResumoServicoScreen(
-                    servico: servico,
-                    endereco: _enderecoAtual,
-                    coordenada: coordenada,
-                    veiculo: veiculo,
-                    veiculoId: veiculoId,
-                  ),
+          child:
+              ElevatedButton(
+            onPressed:
+                _veiculos.isEmpty
+                    ? null
+                    : _solicitarResgate,
+
+            style:
+                ElevatedButton
+                    .styleFrom(
+              backgroundColor:
+                  pretoPrincipal,
+
+              foregroundColor:
+                  Colors.white,
+
+              disabledBackgroundColor:
+                  Colors.grey
+                      .shade400,
+
+              shape:
+                  RoundedRectangleBorder(
+                borderRadius:
+                    BorderRadius
+                        .circular(
+                  28,
                 ),
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: pretoPrincipal,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(28)),
+              ),
+
               elevation: 0,
             ),
-            child: const Text(
+
+            child:
+                const Text(
               'Solicitar Resgate',
-              style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.3),
+              style:
+                  TextStyle(
+                fontSize: 15,
+                fontWeight:
+                    FontWeight.w600,
+                letterSpacing:
+                    0.3,
+              ),
             ),
           ),
         ),
 
-        const SizedBox(height: 24),
+        const SizedBox(
+          height: 24,
+        ),
       ],
     );
   }
 
-  Widget _buildTipoReboque(
-      int index, IconData icone, String titulo, String subtitulo) {
-    final selecionado = _tipoReboque == index;
-    return GestureDetector(
-      onTap: () => setState(() => _tipoReboque = index),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
-        decoration: BoxDecoration(
-          color: selecionado ? azulPrincipal.withOpacity(0.07) : Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: selecionado ? azulPrincipal : const Color(0xFFDDDDDD),
-            width: selecionado ? 1.8 : 1.5,
+  // ============================================================
+  // LISTA DE VEÍCULOS
+  // ============================================================
+
+  Widget _buildVeiculos() {
+  if (_carregandoVeiculos) {
+    return const SizedBox(
+      height: 170,
+      child: Center(
+        child: CircularProgressIndicator(
+          color: azulPrincipal,
+        ),
+      ),
+    );
+  }
+
+  if (_erroVeiculos) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF4F4),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        children: [
+          const Icon(
+            Icons.error_outline_rounded,
+            color: Colors.red,
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Não foi possível carregar os veículos.',
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          TextButton(
+            onPressed: _carregarVeiculos,
+            child: const Text('Tentar novamente'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  if (_veiculos.isEmpty) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(
+        vertical: 26,
+        horizontal: 20,
+      ),
+      decoration: BoxDecoration(
+        color: cinzaFundo,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        children: [
+          const Icon(
+            Icons.directions_car_outlined,
+            size: 34,
+            color: cinzaTexto,
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            'Nenhum veículo cadastrado',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: pretoPrincipal,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Cadastre um veículo para solicitar um resgate.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 13,
+              color: cinzaTexto,
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextButton(
+            onPressed: _abrirAdicionarVeiculo,
+            child: const Text('Adicionar veículo'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  return SizedBox(
+    height: 170,
+    child: ListView.separated(
+      scrollDirection: Axis.horizontal,
+      itemCount: _veiculos.length,
+      separatorBuilder: (_, _) => const SizedBox(width: 12),
+      itemBuilder: (context, index) {
+        final v = _veiculos[index];
+
+        final selecionado =
+            _veiculoSelecionado == index;
+
+        final nome =
+            '${v['marca'] ?? ''} ${v['modelo'] ?? ''}'.trim();
+
+        final placa =
+            v['placa']?.toString() ?? '';
+
+        final cor =
+            v['cor']?.toString() ?? '';
+
+        final ano =
+            v['ano']?.toString() ?? '';
+
+        return GestureDetector(
+          onTap: () {
+            setState(() {
+              _veiculoSelecionado = index;
+            });
+          },
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+
+            // Largura de cada card
+            width: 180,
+
+            padding: const EdgeInsets.all(14),
+
+            decoration: BoxDecoration(
+              color: selecionado
+                  ? pretoPrincipal
+                  : const Color(0xFFF0F0F0),
+              borderRadius: BorderRadius.circular(16),
+            ),
+
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment:
+                      MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: selecionado
+                            ? Colors.white.withValues(
+                                alpha: 0.15,
+                              )
+                            : Colors.white,
+                        borderRadius:
+                            BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        _iconeVeiculo(
+                          v['tipo']?.toString(),
+                        ),
+                        color: selecionado
+                            ? Colors.white
+                            : pretoPrincipal,
+                        size: 20,
+                      ),
+                    ),
+
+                    if (index == 0)
+                      Container(
+                        padding:
+                            const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: azulPrincipal,
+                          borderRadius:
+                              BorderRadius.circular(20),
+                        ),
+                        child: const Text(
+                          'PADRÃO',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+
+                const Spacer(),
+
+                Text(
+                  nome.isEmpty ? 'Veículo' : nome,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: selecionado
+                        ? Colors.white
+                        : pretoPrincipal,
+                  ),
+                ),
+
+                const SizedBox(height: 2),
+
+                Text(
+                  placa,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: selecionado
+                        ? Colors.white.withValues(
+                            alpha: 0.6,
+                          )
+                        : cinzaTexto,
+                  ),
+                ),
+
+                const SizedBox(height: 6),
+
+                Row(
+                  children: [
+                    Icon(
+                      Icons.circle,
+                      size: 7,
+                      color: selecionado
+                          ? Colors.white.withValues(
+                              alpha: 0.5,
+                            )
+                          : cinzaTexto,
+                    ),
+
+                    const SizedBox(width: 5),
+
+                    Expanded(
+                      child: Text(
+                        '$cor • $ano',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: selecionado
+                              ? Colors.white.withValues(
+                                  alpha: 0.6,
+                                )
+                              : cinzaTexto,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    ),
+  );
+}
+
+  // ============================================================
+  // SOLICITAR
+  // ============================================================
+
+  void _solicitarResgate() {
+    if (_veiculos.isEmpty) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Cadastre um veículo primeiro.',
           ),
         ),
+      );
+
+      return;
+    }
+
+    final coordenada =
+        _coordenadaAtual ??
+            const LatLng(
+              -23.5650,
+              -46.6520,
+            );
+
+    const tiposReboque = [
+      'Guincho Leve',
+      'Guincho Pesado',
+    ];
+
+    final veiculo =
+        _veiculos[
+            _veiculoSelecionado];
+
+    final veiculoId =
+        _paraInt(
+      veiculo['id'],
+    );
+
+    if (veiculoId ==
+        null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Veículo inválido.',
+          ),
+        ),
+      );
+
+      return;
+    }
+
+    final marca =
+        veiculo['marca']
+                ?.toString() ??
+            '';
+
+    final modelo =
+        veiculo['modelo']
+                ?.toString() ??
+            '';
+
+    final nomeVeiculo =
+        '$marca $modelo'
+            .trim();
+
+    final servico =
+        tiposDeReboque[
+            tiposReboque[
+                _tipoReboque]];
+
+    if (servico == null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Tipo de reboque inválido.',
+          ),
+        ),
+      );
+
+      return;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            ResumoServicoScreen(
+          servico:
+              servico,
+          endereco:
+              _enderecoAtual,
+          coordenada:
+              coordenada,
+          veiculo:
+              nomeVeiculo.isEmpty
+                  ? 'Veículo'
+                  : nomeVeiculo,
+          veiculoId:
+              veiculoId,
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // TIPO REBOQUE
+  // ============================================================
+
+  Widget _buildTipoReboque(
+    int index,
+    IconData icone,
+    String titulo,
+    String subtitulo,
+  ) {
+    final selecionado =
+        _tipoReboque ==
+            index;
+
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _tipoReboque =
+              index;
+        });
+      },
+
+      child:
+          AnimatedContainer(
+        duration:
+            const Duration(
+          milliseconds:
+              200,
+        ),
+
+        padding:
+            const EdgeInsets
+                .symmetric(
+          horizontal: 10,
+          vertical: 14,
+        ),
+
+        decoration:
+            BoxDecoration(
+          color: selecionado
+              ? azulPrincipal
+                  .withValues(
+                  alpha:
+                      0.07,
+                )
+              : Colors.white,
+
+          borderRadius:
+              BorderRadius
+                  .circular(
+            14,
+          ),
+
+          border:
+              Border.all(
+            color: selecionado
+                ? azulPrincipal
+                : const Color(
+                    0xFFDDDDDD,
+                  ),
+
+            width: selecionado
+                ? 1.8
+                : 1.5,
+          ),
+        ),
+
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisSize:
+              MainAxisSize.min,
           children: [
-            Icon(icone,
-                size: 30, color: selecionado ? azulPrincipal : cinzaTexto),
-            const SizedBox(height: 8),
+            Icon(
+              icone,
+              size:
+                  30,
+              color: selecionado
+                  ? azulPrincipal
+                  : cinzaTexto,
+            ),
+
+            const SizedBox(
+              height: 8,
+            ),
+
             Text(
               titulo,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: selecionado ? pretoPrincipal : cinzaTexto,
+              maxLines:
+                  1,
+              overflow:
+                  TextOverflow
+                      .ellipsis,
+              style:
+                  TextStyle(
+                fontSize:
+                    13,
+                fontWeight:
+                    FontWeight
+                        .w700,
+                color: selecionado
+                    ? pretoPrincipal
+                    : cinzaTexto,
               ),
             ),
-            const SizedBox(height: 3),
+
+            const SizedBox(
+              height: 3,
+            ),
+
             Text(
               subtitulo,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 11, color: cinzaTexto),
-              textAlign: TextAlign.center,
+              maxLines:
+                  2,
+              overflow:
+                  TextOverflow
+                      .ellipsis,
+              style:
+                  const TextStyle(
+                fontSize:
+                    11,
+                color:
+                    cinzaTexto,
+              ),
+              textAlign:
+                  TextAlign.center,
             ),
           ],
         ),
@@ -498,42 +1135,136 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // ============================================================
+  // ÍCONE VEÍCULO
+  // ============================================================
+
+  IconData _iconeVeiculo(
+    String? tipo,
+  ) {
+    switch (tipo) {
+      case 'Moto':
+        return Icons
+            .two_wheeler_rounded;
+
+      case 'SUV':
+        return Icons
+            .airport_shuttle_rounded;
+
+      case 'Carro':
+      default:
+        return Icons
+            .directions_car_rounded;
+    }
+  }
+
+  // ============================================================
+  // CONVERTER ID
+  // ============================================================
+
+  int? _paraInt(
+    dynamic valor,
+  ) {
+    if (valor == null) {
+      return null;
+    }
+
+    if (valor is int) {
+      return valor;
+    }
+
+    return int.tryParse(
+      valor.toString(),
+    );
+  }
+
+  // ============================================================
+  // BOTTOM NAV
+  // ============================================================
+
   Widget _buildBottomNav() {
     return SizedBox(
       height: 80,
-      child: BottomNavigationBar(
-        currentIndex: _navSelecionado,
-        onTap: (index) => setState(() => _navSelecionado = index),
-        type: BottomNavigationBarType.fixed,
-        backgroundColor: pretoPrincipal,
-        selectedItemColor: azulPrincipal,
-        unselectedItemColor: Colors.grey.shade400,
-        selectedLabelStyle: const TextStyle(
+
+      child:
+          BottomNavigationBar(
+        currentIndex:
+            _navSelecionado,
+
+        onTap: (index) {
+          setState(() {
+            _navSelecionado =
+                index;
+          });
+        },
+
+        type:
+            BottomNavigationBarType
+                .fixed,
+
+        backgroundColor:
+            pretoPrincipal,
+
+        selectedItemColor:
+            azulPrincipal,
+
+        unselectedItemColor:
+            Colors.grey
+                .shade400,
+
+        selectedLabelStyle:
+            const TextStyle(
           fontSize: 9,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.8,
+          fontWeight:
+              FontWeight.w700,
+          letterSpacing:
+              0.8,
         ),
-        unselectedLabelStyle: const TextStyle(
+
+        unselectedLabelStyle:
+            const TextStyle(
           fontSize: 9,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.8,
+          fontWeight:
+              FontWeight.w700,
+          letterSpacing:
+              0.8,
         ),
+
         items: const [
           BottomNavigationBarItem(
-            icon: Icon(Icons.explore_rounded),
-            label: 'EXPLORAR',
+            icon: Icon(
+              Icons
+                  .explore_rounded,
+            ),
+            label:
+                'EXPLORAR',
           ),
+
           BottomNavigationBarItem(
-            icon: Icon(Icons.directions_rounded),
-            label: 'ROTAS',
+            icon: Icon(
+              Icons
+                  .directions_rounded,
+            ),
+            label:
+                'ROTAS',
           ),
+
           BottomNavigationBarItem(
-            icon: Icon(Icons.star_border_rounded),
-            label: 'FAVORITOS',
+            icon: Icon(
+              Icons
+                  .star_border_rounded,
+            ),
+            label:
+                'FAVORITOS',
           ),
+
           BottomNavigationBarItem(
-            icon: Icon(Icons.person_outline_rounded),
-            label: 'PERFIL',
+            icon: Icon(
+              Icons
+                  .person_outline_rounded,
+            ),
+            label:
+                'PERFIL',
           ),
         ],
       ),

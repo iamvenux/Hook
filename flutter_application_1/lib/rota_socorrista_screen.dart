@@ -769,7 +769,6 @@ class _ModalConcluir extends StatelessWidget {
   final String nomeUsuario;
   final VoidCallback onConfirmar;
 
-  static const Color azulPrincipal  = Color(0xFF1A7EF5);
   static const Color pretoPrincipal = Color(0xFF1A1A1A);
   static const Color cinzaTexto     = Color(0xFF8A8A8A);
 

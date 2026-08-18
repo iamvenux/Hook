@@ -1,215 +1,809 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 
-/// Ponto único de comunicação com o backend.
-/// Todas as telas chamam métodos daqui em vez de usar http diretamente
-/// — se a URL do back mudar, ou a forma de autenticar mudar, só mexe
-/// aqui.
+import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
+
+class ApiException implements Exception {
+  final String mensagem;
+  final int? statusCode;
+
+  ApiException(
+    this.mensagem, {
+    this.statusCode,
+  });
+
+  @override
+  String toString() => mensagem;
+}
+
 class ApiService {
   ApiService._();
-  static final ApiService instance = ApiService._();
 
-  // ── Troque conforme onde o backend está rodando ──────────
-  // Emulador Android:  10.0.2.2   (aponta pro localhost da máquina)
-  // iOS Simulator:     localhost
-  // Celular físico:    IP da sua máquina na mesma rede Wi-Fi
-  //                    (ex: 192.168.0.15) — descubra com `ipconfig`/`ifconfig`
-  static const String baseUrl = 'http://10.0.2.2:8080/api';
+  static final ApiService instance =
+      ApiService._();
 
-  String? _token;
+  // ============================================================
+  // URL
+  // ============================================================
 
-  Future<void> _carregarToken() async {
-    if (_token != null) return;
-    final prefs = await SharedPreferences.getInstance();
-    _token = prefs.getString('api_token');
-  }
-
-  Future<void> _salvarToken(String token) async {
-    _token = token;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('api_token', token);
-  }
-
-  Future<void> logout() async {
-    _token = null;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('api_token');
-  }
-
-  Future<bool> get estaLogado async {
-    await _carregarToken();
-    return _token != null;
-  }
-
-  Map<String, String> get _headers => {
-        'Content-Type': 'application/json',
-        if (_token != null) 'Authorization': 'Bearer $_token',
-      };
-
-  Future<Map<String, dynamic>> _post(
-    String path,
-    Map<String, dynamic> body, {
-    bool auth = true,
-  }) async {
-    if (auth) await _carregarToken();
-    final resp = await http.post(
-      Uri.parse('$baseUrl/$path'),
-      headers: _headers,
-      body: jsonEncode(body),
-    );
-    return _tratarResposta(resp);
-  }
-
-  Future<Map<String, dynamic>> _get(String path) async {
-    await _carregarToken();
-    final resp = await http.get(Uri.parse('$baseUrl/$path'), headers: _headers);
-    return _tratarResposta(resp);
-  }
-
-  Map<String, dynamic> _tratarResposta(http.Response resp) {
-    final dados = resp.body.isNotEmpty
-        ? jsonDecode(resp.body) as Map<String, dynamic>
-        : <String, dynamic>{};
-
-    if (resp.statusCode >= 400) {
-      final mensagem = dados['erro'] ??
-          dados['messages']?.toString() ??
-          'Erro inesperado (${resp.statusCode})';
-      throw ApiException(mensagem.toString(), resp.statusCode);
+  static String get baseUrl {
+    if (kIsWeb) {
+      return 'http://localhost/flutter_application_1/backend/api';
     }
-    return dados;
+
+    return 'http://10.0.2.2/flutter_application_1/backend/api';
   }
 
-  // ── Autenticação ──────────────────────────────────────────
+  // ============================================================
+  // USUÁRIO LOGADO
+  // ============================================================
 
-  Future<Map<String, dynamic>> registro({
-    required String nome,
-    required String email,
-    required String senha,
-    required String tipo, // 'cliente' ou 'motorista'
-    String? telefone,
-  }) async {
-    final resp = await _post('auth/registro', {
-      'nome': nome,
-      'email': email,
-      'senha': senha,
-      'tipo': tipo,
-      if (telefone != null) 'telefone': telefone,
-    }, auth: false);
-    return resp['usuario'] as Map<String, dynamic>;
-  }
+  int? _usuarioId;
 
-  /// Faz login e já salva o token. Retorna os dados do usuário
-  /// (inclui `tipo`: 'cliente' ou 'motorista', pra saber pra qual
-  /// Home navegar).
+  String? _nomeUsuario;
+  String? _emailUsuario;
+  String? _tipoUsuario;
+  String? _telefoneUsuario;
+  String? _placaGuincho;
+  String? _apiToken;
+
+  int? get usuarioId =>
+      _usuarioId;
+
+  String? get nomeUsuario =>
+      _nomeUsuario;
+
+  String? get emailUsuario =>
+      _emailUsuario;
+
+  String? get tipoUsuario =>
+      _tipoUsuario;
+
+  String? get telefoneUsuario =>
+      _telefoneUsuario;
+
+  String? get placaGuincho =>
+      _placaGuincho;
+
+  String? get apiToken =>
+      _apiToken;
+
+  bool get estaLogado =>
+      _usuarioId != null;
+
+  bool get ehCliente =>
+      _tipoUsuario == 'cliente';
+
+  bool get ehMotorista =>
+      _tipoUsuario == 'motorista';
+
+  // ============================================================
+  // LOGIN
+  // ============================================================
+
   Future<Map<String, dynamic>> login({
     required String email,
     required String senha,
   }) async {
-    final resp = await _post('auth/login', {
-      'email': email,
-      'senha': senha,
-    }, auth: false);
-    await _salvarToken(resp['token'] as String);
-    return resp['usuario'] as Map<String, dynamic>;
+    final response = await http
+        .post(
+          Uri.parse(
+            '$baseUrl/login.php',
+          ),
+          headers: {
+            'Content-Type':
+                'application/json',
+            'Accept':
+                'application/json',
+          },
+          body: jsonEncode({
+            'email': email,
+            'senha': senha,
+          }),
+        )
+        .timeout(
+          const Duration(
+            seconds: 10,
+          ),
+        );
+
+    final dados =
+        await _decodificarResposta(
+      response,
+    );
+
+    final usuarioRaw =
+        dados['usuario'];
+
+    if (usuarioRaw is! Map) {
+      throw ApiException(
+        'O servidor não retornou os dados do usuário.',
+      );
+    }
+
+    final usuario =
+        Map<String, dynamic>.from(
+      usuarioRaw,
+    );
+
+    final id =
+        _paraInt(
+      usuario['id'],
+    );
+
+    if (id == null) {
+      throw ApiException(
+        'Usuário inválido.',
+      );
+    }
+
+    _usuarioId = id;
+
+    _nomeUsuario =
+        usuario['nome']?.toString();
+
+    _emailUsuario =
+        usuario['email']?.toString();
+
+    _tipoUsuario =
+        usuario['tipo']?.toString();
+
+    _telefoneUsuario =
+        usuario['telefone']?.toString();
+
+    _placaGuincho =
+        usuario['placa_guincho']
+            ?.toString();
+
+    _apiToken =
+        usuario['api_token']
+            ?.toString();
+
+    return usuario;
   }
 
-  // ── Veículos ──────────────────────────────────────────────
+  // ============================================================
+  // LOGOUT
+  // ============================================================
 
-  Future<List<dynamic>> listarVeiculos() async {
-    final resp = await _get('veiculos');
-    return resp['veiculos'] as List<dynamic>;
+  void logout() {
+    _usuarioId = null;
+
+    _nomeUsuario = null;
+
+    _emailUsuario = null;
+
+    _tipoUsuario = null;
+
+    _telefoneUsuario = null;
+
+    _placaGuincho = null;
+
+    _apiToken = null;
   }
 
-  Future<Map<String, dynamic>> criarVeiculo({
+  // ============================================================
+  // ADICIONAR VEÍCULO
+  // ============================================================
+
+  Future<Map<String, dynamic>>
+      adicionarVeiculo({
     required String tipo,
     required String marca,
     required String modelo,
-    int? ano,
+    required int ano,
     required String placa,
-    String? cor,
+    required String cor,
   }) async {
-    final resp = await _post('veiculos', {
-      'tipo': tipo,
-      'marca': marca,
-      'modelo': modelo,
-      if (ano != null) 'ano': ano,
-      'placa': placa,
-      if (cor != null) 'cor': cor,
-    });
-    return resp['veiculo'] as Map<String, dynamic>;
+    final id =
+        _usuarioId;
+
+    if (id == null) {
+      throw ApiException(
+        'Usuário não identificado. Faça login novamente.',
+      );
+    }
+
+    if (_tipoUsuario !=
+        'cliente') {
+      throw ApiException(
+        'Somente clientes podem cadastrar veículos.',
+      );
+    }
+
+    final response =
+        await http
+            .post(
+              Uri.parse(
+                '$baseUrl/adicionar_veiculo.php',
+              ),
+              headers: {
+                'Content-Type':
+                    'application/json',
+                'Accept':
+                    'application/json',
+              },
+              body: jsonEncode({
+                'usuario_id':
+                    id,
+                'tipo':
+                    tipo,
+                'marca':
+                    marca,
+                'modelo':
+                    modelo,
+                'ano':
+                    ano,
+                'placa':
+                    placa,
+                'cor':
+                    cor,
+              }),
+            )
+            .timeout(
+              const Duration(
+                seconds: 10,
+              ),
+            );
+
+    return _decodificarResposta(
+      response,
+    );
   }
 
-  // ── Solicitações — lado cliente ──────────────────────────
+  // ============================================================
+  // LISTAR VEÍCULOS
+  // ============================================================
 
-  Future<Map<String, dynamic>> criarSolicitacao({
+  Future<List<Map<String, dynamic>>>
+      listarVeiculos() async {
+    final id =
+        _usuarioId;
+
+    if (id == null) {
+      throw ApiException(
+        'Usuário não identificado. Faça login novamente.',
+      );
+    }
+
+    if (_tipoUsuario !=
+        'cliente') {
+      throw ApiException(
+        'Somente clientes possuem veículos cadastrados.',
+      );
+    }
+
+    final uri =
+        Uri.parse(
+      '$baseUrl/listar_veiculos.php'
+      '?usuario_id=$id',
+    );
+
+    final response =
+        await http
+            .get(
+              uri,
+              headers: const {
+                'Accept':
+                    'application/json',
+              },
+            )
+            .timeout(
+              const Duration(
+                seconds: 5,
+              ),
+            );
+
+    final dados =
+        await _decodificarResposta(
+      response,
+    );
+
+    final lista =
+        dados['veiculos'];
+
+    if (lista is! List) {
+      return [];
+    }
+
+    return lista
+        .map(
+          (item) =>
+              Map<String, dynamic>.from(
+            item as Map,
+          ),
+        )
+        .toList();
+  }
+
+  // ============================================================
+  // CRIAR SOLICITAÇÃO
+  // ============================================================
+
+  Future<Map<String, dynamic>>
+      criarSolicitacao({
     required int veiculoId,
-    required String tipoReboque, // 'Guincho Leve' ou 'Guincho Pesado'
-    required String formaPagamento, // 'Pix' ou 'Dinheiro'
+    required String tipoReboque,
+    required String formaPagamento,
     required String endereco,
     required double latitude,
     required double longitude,
+    double? valorEstimado,
   }) async {
-    final resp = await _post('solicitacoes', {
-      'veiculo_id': veiculoId,
-      'tipo_reboque': tipoReboque,
-      'forma_pagamento': formaPagamento,
-      'endereco': endereco,
-      'latitude': latitude,
-      'longitude': longitude,
-    });
-    return resp['solicitacao'] as Map<String, dynamic>;
+    final clienteId =
+        _usuarioId;
+
+    if (clienteId == null) {
+      throw ApiException(
+        'Cliente não identificado.',
+      );
+    }
+
+    final body =
+        <String, dynamic>{
+      'cliente_id':
+          clienteId,
+      'veiculo_id':
+          veiculoId,
+      'tipo_reboque':
+          tipoReboque,
+      'forma_pagamento':
+          formaPagamento,
+      'endereco':
+          endereco,
+      'latitude':
+          latitude,
+      'longitude':
+          longitude,
+    };
+
+    if (valorEstimado != null) {
+      body['valor_estimado'] =
+          valorEstimado;
+    }
+
+    final response =
+        await http
+            .post(
+              Uri.parse(
+                '$baseUrl/criar_solicitacao.php',
+              ),
+              headers: {
+                'Content-Type':
+                    'application/json',
+                'Accept':
+                    'application/json',
+              },
+              body:
+                  jsonEncode(
+                body,
+              ),
+            )
+            .timeout(
+              const Duration(
+                seconds: 10,
+              ),
+            );
+
+    return _decodificarResposta(
+      response,
+    );
   }
 
-  /// Usado pro polling na tela de rastreio. Retorna a solicitação
-  /// atualizada, a mensagem amigável de status, e os dados do
-  /// motorista quando já tiver um atribuído.
-  Future<Map<String, dynamic>> consultarSolicitacao(int id) {
-    return _get('solicitacoes/$id');
+  // ============================================================
+  // CONSULTAR SOLICITAÇÃO
+  // ============================================================
+
+  Future<Map<String, dynamic>>
+      consultarSolicitacao(
+    int solicitacaoId,
+  ) async {
+    final uri =
+        Uri.parse(
+      '$baseUrl/consultar_solicitacao.php'
+      '?solicitacao_id=$solicitacaoId',
+    );
+
+    final response =
+        await http
+            .get(
+              uri,
+              headers: const {
+                'Accept':
+                    'application/json',
+              },
+            )
+            .timeout(
+              const Duration(
+                seconds: 5,
+              ),
+            );
+
+    return _decodificarResposta(
+      response,
+    );
   }
 
-  Future<List<dynamic>> minhasSolicitacoes() async {
-    final resp = await _get('solicitacoes/minhas');
-    return resp['solicitacoes'] as List<dynamic>;
+  // ============================================================
+  // CANCELAR
+  // ============================================================
+
+  Future<Map<String, dynamic>>
+      cancelarSolicitacao(
+    int solicitacaoId,
+  ) async {
+    final response =
+        await http
+            .post(
+              Uri.parse(
+                '$baseUrl/cancelar_solicitacao.php',
+              ),
+              headers: {
+                'Content-Type':
+                    'application/json',
+                'Accept':
+                    'application/json',
+              },
+              body:
+                  jsonEncode({
+                'solicitacao_id':
+                    solicitacaoId,
+                if (_usuarioId != null)
+                  'cliente_id':
+                      _usuarioId,
+              }),
+            )
+            .timeout(
+              const Duration(
+                seconds: 10,
+              ),
+            );
+
+    return _decodificarResposta(
+      response,
+    );
   }
 
-  Future<void> cancelarSolicitacao(int id) {
-    return _post('solicitacoes/$id/cancelar', {});
+  // ============================================================
+  // BUSCAR SOLICITAÇÕES - MOTORISTA
+  // ============================================================
+
+  Future<List<Map<String, dynamic>>>
+      buscarSolicitacoes({
+    int? motoristaId,
+  }) async {
+    final id =
+        motoristaId ??
+            _usuarioId;
+
+    if (id == null) {
+      throw ApiException(
+        'Motorista não identificado.',
+      );
+    }
+
+    final uri =
+        Uri.parse(
+      '$baseUrl/buscar_solicitacoes.php'
+      '?motorista_id=$id',
+    );
+
+    final response =
+        await http
+            .get(
+              uri,
+              headers: const {
+                'Accept':
+                    'application/json',
+              },
+            )
+            .timeout(
+              const Duration(
+                seconds: 5,
+              ),
+            );
+
+    final dados =
+        await _decodificarResposta(
+      response,
+    );
+
+    final lista =
+        dados['solicitacoes'];
+
+    if (lista is! List) {
+      return [];
+    }
+
+    return lista
+        .map(
+          (item) =>
+              Map<String, dynamic>.from(
+            item as Map,
+          ),
+        )
+        .toList();
   }
 
-  // ── Solicitações — lado motorista ────────────────────────
+  // ============================================================
+  // ACEITAR SOLICITAÇÃO
+  // ============================================================
 
-  Future<List<dynamic>> solicitacoesDisponiveis() async {
-    final resp = await _get('solicitacoes/disponiveis');
-    return resp['solicitacoes'] as List<dynamic>;
+  Future<Map<String, dynamic>>
+      aceitarSolicitacao({
+    required int solicitacaoId,
+    int? motoristaId,
+  }) async {
+    final id =
+        motoristaId ??
+            _usuarioId;
+
+    if (id == null) {
+      throw ApiException(
+        'Motorista não identificado.',
+      );
+    }
+
+    final response =
+        await http
+            .post(
+              Uri.parse(
+                '$baseUrl/aceitar_solicitacao.php',
+              ),
+              headers: {
+                'Content-Type':
+                    'application/json',
+                'Accept':
+                    'application/json',
+              },
+              body:
+                  jsonEncode({
+                'solicitacao_id':
+                    solicitacaoId,
+                'motorista_id':
+                    id,
+              }),
+            )
+            .timeout(
+              const Duration(
+                seconds: 10,
+              ),
+            );
+
+    return _decodificarResposta(
+      response,
+    );
   }
 
-  Future<Map<String, dynamic>> aceitarSolicitacao(int id) async {
-    final resp = await _post('solicitacoes/$id/aceitar', {});
-    return resp['solicitacao'] as Map<String, dynamic>;
+  // ============================================================
+  // ATUALIZAR STATUS
+  // ============================================================
+
+  Future<Map<String, dynamic>>
+      atualizarStatus({
+    required int solicitacaoId,
+    required String status,
+    int? motoristaId,
+  }) async {
+    final id =
+        motoristaId ??
+            _usuarioId;
+
+    if (id == null) {
+      throw ApiException(
+        'Motorista não identificado.',
+      );
+    }
+
+    final response =
+        await http
+            .post(
+              Uri.parse(
+                '$baseUrl/atualizar_status.php',
+              ),
+              headers: {
+                'Content-Type':
+                    'application/json',
+                'Accept':
+                    'application/json',
+              },
+              body:
+                  jsonEncode({
+                'solicitacao_id':
+                    solicitacaoId,
+                'motorista_id':
+                    id,
+                'status':
+                    status,
+              }),
+            )
+            .timeout(
+              const Duration(
+                seconds: 10,
+              ),
+            );
+
+    return _decodificarResposta(
+      response,
+    );
   }
 
-  Future<void> atualizarStatus(int id, String status) {
-    // status: 'a_caminho' | 'concluido' | 'cancelado'
-    return _post('solicitacoes/$id/status', {'status': status});
+  // ============================================================
+  // LOCALIZAÇÃO
+  // ============================================================
+
+  Future<Map<String, dynamic>>
+      atualizarLocalizacao({
+    required double latitude,
+    required double longitude,
+    int? motoristaId,
+  }) async {
+    final id =
+        motoristaId ??
+            _usuarioId;
+
+    if (id == null) {
+      throw ApiException(
+        'Motorista não identificado.',
+      );
+    }
+
+    final response =
+        await http
+            .post(
+              Uri.parse(
+                '$baseUrl/atualizar_localizacao.php',
+              ),
+              headers: {
+                'Content-Type':
+                    'application/json',
+                'Accept':
+                    'application/json',
+              },
+              body:
+                  jsonEncode({
+                'motorista_id':
+                    id,
+                'latitude':
+                    latitude,
+                'longitude':
+                    longitude,
+              }),
+            )
+            .timeout(
+              const Duration(
+                seconds: 5,
+              ),
+            );
+
+    return _decodificarResposta(
+      response,
+    );
   }
 
-  // ── Avaliação ─────────────────────────────────────────────
+  // ============================================================
+  // DISPONIBILIDADE
+  // ============================================================
 
-  Future<void> avaliar({required int solicitacaoId, required int nota}) {
-    return _post('avaliacoes', {
-      'solicitacao_id': solicitacaoId,
-      'nota': nota,
-    });
+  Future<Map<String, dynamic>>
+      atualizarDisponibilidade({
+    required bool disponivel,
+    int? motoristaId,
+  }) async {
+    final id =
+        motoristaId ??
+            _usuarioId;
+
+    if (id == null) {
+      throw ApiException(
+        'Motorista não identificado.',
+      );
+    }
+
+    final response =
+        await http
+            .post(
+              Uri.parse(
+                '$baseUrl/atualizar_disponibilidade.php',
+              ),
+              headers: {
+                'Content-Type':
+                    'application/json',
+                'Accept':
+                    'application/json',
+              },
+              body:
+                  jsonEncode({
+                'motorista_id':
+                    id,
+                'disponivel':
+                    disponivel
+                        ? 1
+                        : 0,
+              }),
+            )
+            .timeout(
+              const Duration(
+                seconds: 5,
+              ),
+            );
+
+    return _decodificarResposta(
+      response,
+    );
   }
-}
 
-class ApiException implements Exception {
-  final String mensagem;
-  final int statusCode;
-  ApiException(this.mensagem, this.statusCode);
+  // ============================================================
+  // RESPOSTA
+  // ============================================================
 
-  @override
-  String toString() => mensagem;
+  Future<Map<String, dynamic>>
+      _decodificarResposta(
+    http.Response response,
+  ) async {
+    Map<String, dynamic>
+        dados;
+
+    try {
+      final decoded =
+          jsonDecode(
+        response.body,
+      );
+
+      if (decoded is! Map) {
+        throw const FormatException();
+      }
+
+      dados =
+          Map<String, dynamic>.from(
+        decoded,
+      );
+    } catch (_) {
+      throw ApiException(
+        'Resposta inválida do servidor: ${response.body}',
+        statusCode:
+            response.statusCode,
+      );
+    }
+
+    if (response.statusCode < 200 ||
+        response.statusCode >= 300) {
+      throw ApiException(
+        dados['mensagem']
+                ?.toString() ??
+            'Erro do servidor.',
+        statusCode:
+            response.statusCode,
+      );
+    }
+
+    if (dados['sucesso'] ==
+        false) {
+      throw ApiException(
+        dados['mensagem']
+                ?.toString() ??
+            'Não foi possível realizar a operação.',
+        statusCode:
+            response.statusCode,
+      );
+    }
+
+    return dados;
+  }
+
+  int? _paraInt(
+    dynamic valor,
+  ) {
+    if (valor == null) {
+      return null;
+    }
+
+    if (valor is int) {
+      return valor;
+    }
+
+    return int.tryParse(
+      valor.toString(),
+    );
+  }
 }
