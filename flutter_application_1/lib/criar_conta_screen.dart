@@ -1,763 +1,1069 @@
 import 'package:flutter/material.dart';
-import 'home.dart';
+import 'package:flutter/services.dart';
 
-// ─────────────────────────────────────────────
-//  Dados de domínio
-// ─────────────────────────────────────────────
-enum TipoPerfil { usuario, socorrista }
+import 'api_service.dart';
+import 'confirmar_email_screen.dart';
 
-enum TipoAtuacao { autonomo, empresa, pessoa }
-
-const List<String> kServicosDisponiveis = [
-  'Troca de pneu',
-  'Recarga de bateria',
-  'Abastecimento de emergência',
-  'Chaveiro automotivo',
-  'Mecânico leve',
-  'Empurrar veículo',
-  'Primeiros socorros básicos',
-  'Orientação de rota',
-];
-
-// ─────────────────────────────────────────────
-//  Widget principal
-// ─────────────────────────────────────────────
 class CriarContaScreen extends StatefulWidget {
-  const CriarContaScreen({super.key});
+  const CriarContaScreen({
+    super.key,
+  });
 
   @override
-  State<CriarContaScreen> createState() => _CriarContaScreenState();
+  State<CriarContaScreen> createState() =>
+      _CriarContaScreenState();
 }
 
-class _CriarContaScreenState extends State<CriarContaScreen> {
-  // ── Cores ──────────────────────────────────
-  static const Color azulPrincipal  = Color(0xFF1A7EF5);
-  static const Color cinzaTexto     = Color(0xFF8A8A8A);
-  static const Color pretoPrincipal = Color(0xFF1A1A1A);
-  static const Color cinzaBorda     = Color(0xFFDDDDDD);
-  static const Color cinzaFundo     = Color(0xFFF5F5F5);
+class _CriarContaScreenState
+    extends State<CriarContaScreen> {
+  static const Color azulPrincipal =
+      Color(0xFF1A7EF5);
 
-  // ── Etapa ──────────────────────────────────
-  // 0 = seleção de perfil | 1 = formulário
-  int _etapa = 0;
+  static const Color pretoPrincipal =
+      Color(0xFF1A1A1A);
 
-  // ── Perfil selecionado ─────────────────────
-  TipoPerfil? _perfil;
-  TipoAtuacao _tipoAtuacao = TipoAtuacao.autonomo;
-  final Set<String> _servicosSelecionados = {};
+  static const Color cinzaTexto =
+      Color(0xFF8A8A8A);
 
-  // ── Controllers ────────────────────────────
-  final _formKey                  = GlobalKey<FormState>();
-  final _nomeController           = TextEditingController();
-  final _emailController          = TextEditingController();
-  final _telefoneController       = TextEditingController();
-  final _cpfCnpjController        = TextEditingController();
-  final _senhaController          = TextEditingController();
-  final _confirmarSenhaController = TextEditingController();
+  final _formKey =
+      GlobalKey<FormState>();
 
-  bool _senhaVisivel          = false;
+  final _nomeController =
+      TextEditingController();
+
+  final _emailController =
+      TextEditingController();
+
+  final _telefoneController =
+      TextEditingController();
+
+  final _senhaController =
+      TextEditingController();
+
+  final _confirmarSenhaController =
+      TextEditingController();
+
+  final _placaGuinchoController =
+      TextEditingController();
+
+  String _tipoUsuario = 'cliente';
+  String _tipoGuincho = 'Leve';
+
+  bool _senhaVisivel = false;
   bool _confirmarSenhaVisivel = false;
-  bool _carregando            = false;
+  bool _carregando = false;
 
   @override
   void dispose() {
     _nomeController.dispose();
     _emailController.dispose();
     _telefoneController.dispose();
-    _cpfCnpjController.dispose();
     _senhaController.dispose();
     _confirmarSenhaController.dispose();
+    _placaGuinchoController.dispose();
+
     super.dispose();
   }
 
-  // ── Ações ──────────────────────────────────
-  void _confirmarPerfil() {
-    if (_perfil == null) return;
-    setState(() => _etapa = 1);
-  }
-
   Future<void> _criarConta() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    if (_perfil == TipoPerfil.socorrista && _servicosSelecionados.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Selecione ao menos um serviço oferecido.')),
-      );
+    if (!_formKey.currentState!.validate()) {
       return;
     }
 
-    setState(() => _carregando = true);
-    await Future.delayed(const Duration(seconds: 2)); // TODO: API
-    setState(() => _carregando = false);
+    final nome =
+        _nomeController.text.trim();
 
-    if (mounted) {
-      Navigator.pushReplacement(
+    final email =
+        _emailController.text.trim();
+
+    final telefone =
+        _telefoneController.text.replaceAll(
+      RegExp(r'\D'),
+      '',
+    );
+
+    final placaGuincho =
+        _placaGuinchoController.text
+            .trim()
+            .toUpperCase()
+            .replaceAll(
+              RegExp(r'[^A-Z0-9]'),
+              '',
+            );
+
+    final senha =
+        _senhaController.text;
+
+    setState(() {
+      _carregando = true;
+    });
+
+    try {
+      await ApiService.instance.criarConta(
+        nome: nome,
+        email: email,
+        telefone: telefone,
+        senha: senha,
+        tipo: _tipoUsuario,
+        placaGuincho:
+            _tipoUsuario == 'motorista'
+                ? placaGuincho
+                : null,
+        tipoGuincho:
+            _tipoUsuario == 'motorista'
+                ? _tipoGuincho
+                : null,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _carregando = false;
+      });
+
+      // IMPORTANTE:
+      // Cadastro NÃO faz login e NÃO abre a Home.
+      //
+      // Vai para a confirmação do código.
+      Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        MaterialPageRoute(
+          builder: (_) =>
+              ConfirmarEmailScreen(
+            email: email,
+          ),
+        ),
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _carregando = false;
+      });
+
+      ScaffoldMessenger.of(context)
+          .showSnackBar(
+        SnackBar(
+          content: Text(
+            e.mensagem,
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _carregando = false;
+      });
+
+      ScaffoldMessenger.of(context)
+          .showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Não foi possível criar sua conta.',
+          ),
+        ),
       );
     }
   }
 
-  // ─────────────────────────────────────────────
-  //  Build
-  // ─────────────────────────────────────────────
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: GestureDetector(
-          onTap: () {
-            if (_etapa == 1) {
-              setState(() => _etapa = 0);
-            } else {
-              Navigator.pop(context);
-            }
-          },
-          child: const Icon(Icons.arrow_back, color: pretoPrincipal),
+  InputDecoration _decoration({
+    required String hint,
+    Widget? suffixIcon,
+  }) {
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: const TextStyle(
+        color: cinzaTexto,
+        fontSize: 14,
+      ),
+      suffixIcon: suffixIcon,
+      filled: true,
+      fillColor: Colors.white,
+      contentPadding:
+          const EdgeInsets.symmetric(
+        horizontal: 18,
+        vertical: 17,
+      ),
+      enabledBorder:
+          OutlineInputBorder(
+        borderRadius:
+            BorderRadius.circular(
+          12,
+        ),
+        borderSide:
+            const BorderSide(
+          color:
+              Color(
+            0xFFDDDDDD,
+          ),
+          width: 1.5,
         ),
       ),
-      body: SafeArea(
-        child: _etapa == 0 ? _buildSelecaoPerfil() : _buildFormulario(),
+      focusedBorder:
+          OutlineInputBorder(
+        borderRadius:
+            BorderRadius.circular(
+          12,
+        ),
+        borderSide:
+            const BorderSide(
+          color:
+              azulPrincipal,
+          width: 1.8,
+        ),
+      ),
+      errorBorder:
+          OutlineInputBorder(
+        borderRadius:
+            BorderRadius.circular(
+          12,
+        ),
+        borderSide:
+            const BorderSide(
+          color: Colors.red,
+        ),
+      ),
+      focusedErrorBorder:
+          OutlineInputBorder(
+        borderRadius:
+            BorderRadius.circular(
+          12,
+        ),
+        borderSide:
+            const BorderSide(
+          color: Colors.red,
+          width: 1.5,
+        ),
       ),
     );
   }
 
-  // ─────────────────────────────────────────────
-  //  Etapa 0 — Seleção de perfil
-  // ─────────────────────────────────────────────
-  Widget _buildSelecaoPerfil() {
+  Widget _label(
+    String texto,
+  ) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 32),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 8),
-          const Text(
-            'Criar conta',
-            style: TextStyle(
-              fontSize: 30,
-              fontWeight: FontWeight.bold,
-              color: pretoPrincipal,
-              letterSpacing: -0.5,
-            ),
+      padding:
+          const EdgeInsets.only(
+        bottom: 8,
+      ),
+      child: Align(
+        alignment:
+            Alignment.centerLeft,
+        child: Text(
+          texto,
+          style:
+              const TextStyle(
+            fontSize: 14,
+            fontWeight:
+                FontWeight.w600,
+            color:
+                pretoPrincipal,
           ),
-          const SizedBox(height: 6),
-          const Text(
-            'Como você vai usar o Hook?',
-            style: TextStyle(fontSize: 15, color: cinzaTexto),
-          ),
-          const SizedBox(height: 40),
-
-          // Card Usuário
-          _buildPerfilCard(
-            perfil: TipoPerfil.usuario,
-            icon: Icons.person_outline_rounded,
-            titulo: 'Usuário',
-            descricao: 'Preciso de socorro em estrada ou ajuda com meu veículo.',
-          ),
-
-          const SizedBox(height: 16),
-
-          // Card Socorrista
-          _buildPerfilCard(
-            perfil: TipoPerfil.socorrista,
-            icon: Icons.build_outlined,
-            titulo: 'Motorista Socorrista',
-            descricao: 'Quero oferecer serviços de auxílio em rodovias.',
-          ),
-
-          const Spacer(),
-
-          // Botão continuar
-          SizedBox(
-            width: double.infinity,
-            height: 54,
-            child: ElevatedButton(
-              onPressed: _perfil != null ? _confirmarPerfil : null,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: azulPrincipal,
-                foregroundColor: Colors.white,
-                disabledBackgroundColor: azulPrincipal.withOpacity(0.35),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-                elevation: 0,
-              ),
-              child: const Text(
-                'Continuar',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 24),
-
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Text('Já tem cadastro? ',
-                  style: TextStyle(fontSize: 14, color: cinzaTexto)),
-              GestureDetector(
-                onTap: () => Navigator.pop(context),
-                child: const Text(
-                  'Entrar',
-                  style: TextStyle(
-                      fontSize: 14,
-                      color: azulPrincipal,
-                      fontWeight: FontWeight.w600),
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 40),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildPerfilCard({
-    required TipoPerfil perfil,
-    required IconData icon,
+  Widget _buildTipoConta({
+    required String tipo,
     required String titulo,
-    required String descricao,
+    required String subtitulo,
+    required IconData icone,
   }) {
-    final selecionado = _perfil == perfil;
+    final selecionado =
+        _tipoUsuario == tipo;
 
     return GestureDetector(
-      onTap: () => setState(() => _perfil = perfil),
+      onTap: () {
+        setState(() {
+          _tipoUsuario = tipo;
+
+          if (tipo != 'motorista') {
+            _placaGuinchoController.clear();
+            _tipoGuincho = 'Leve';
+          }
+        });
+      },
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: selecionado ? azulPrincipal.withOpacity(0.06) : cinzaFundo,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: selecionado ? azulPrincipal : Colors.transparent,
-            width: 2,
+        duration:
+            const Duration(
+          milliseconds: 180,
+        ),
+        padding:
+            const EdgeInsets.all(
+          14,
+        ),
+        decoration:
+            BoxDecoration(
+          color: selecionado
+              ? azulPrincipal.withValues(
+                  alpha: 0.08,
+                )
+              : Colors.white,
+          borderRadius:
+              BorderRadius.circular(
+            14,
+          ),
+          border:
+              Border.all(
+            color: selecionado
+                ? azulPrincipal
+                : const Color(
+                    0xFFDDDDDD,
+                  ),
+            width:
+                selecionado
+                    ? 1.8
+                    : 1.2,
           ),
         ),
-        child: Row(
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: selecionado
-                    ? azulPrincipal.withOpacity(0.12)
-                    : const Color(0xFFE8E8E8),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon,
-                  color: selecionado ? azulPrincipal : cinzaTexto, size: 24),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    titulo,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color:
-                          selecionado ? azulPrincipal : pretoPrincipal,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    descricao,
-                    style: const TextStyle(fontSize: 13, color: cinzaTexto),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              width: 22,
-              height: 22,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: selecionado ? azulPrincipal : cinzaBorda,
-                  width: 2,
-                ),
-                color: selecionado ? azulPrincipal : Colors.transparent,
-              ),
-              child: selecionado
-                  ? const Icon(Icons.check, color: Colors.white, size: 13)
-                  : null,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ─────────────────────────────────────────────
-  //  Etapa 1 — Formulário
-  // ─────────────────────────────────────────────
-  Widget _buildFormulario() {
-    final isSocorrista = _perfil == TipoPerfil.socorrista;
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 32),
-      child: Form(
-        key: _formKey,
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 8),
+            Icon(
+              icone,
+              color: selecionado
+                  ? azulPrincipal
+                  : pretoPrincipal,
+              size: 28,
+            ),
 
-            // Badge de perfil
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: azulPrincipal.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    isSocorrista
-                        ? Icons.build_outlined
-                        : Icons.person_outline_rounded,
-                    color: azulPrincipal,
-                    size: 14,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    isSocorrista ? 'Motorista Socorrista' : 'Usuário',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: azulPrincipal,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
+            const SizedBox(
+              height: 8,
+            ),
+
+            Text(
+              titulo,
+              style:
+                  TextStyle(
+                fontSize: 14,
+                fontWeight:
+                    FontWeight.w700,
+                color: selecionado
+                    ? azulPrincipal
+                    : pretoPrincipal,
               ),
             ),
 
-            const SizedBox(height: 16),
+            const SizedBox(
+              height: 3,
+            ),
 
-            const Text(
-              'Criar conta',
-              style: TextStyle(
-                fontSize: 30,
-                fontWeight: FontWeight.bold,
-                color: pretoPrincipal,
-                letterSpacing: -0.5,
+            Text(
+              subtitulo,
+              textAlign:
+                  TextAlign.center,
+              style:
+                  const TextStyle(
+                fontSize: 11,
+                color:
+                    cinzaTexto,
               ),
             ),
-            const SizedBox(height: 6),
-            const Text(
-              'Preencha os dados para começar',
-              style: TextStyle(fontSize: 15, color: cinzaTexto),
-            ),
-
-            const SizedBox(height: 32),
-
-            // ── Dados básicos ──────────────────
-            _buildLabel('Nome completo'),
-            const SizedBox(height: 8),
-            _buildInput(
-              controller: _nomeController,
-              hint: 'Seu nome',
-              icon: Icons.person_outline_rounded,
-              validator: (v) =>
-                  (v == null || v.isEmpty) ? 'Informe seu nome' : null,
-            ),
-
-            const SizedBox(height: 20),
-
-            _buildLabel('Email'),
-            const SizedBox(height: 8),
-            _buildInput(
-              controller: _emailController,
-              hint: 'nome@exemplo.com',
-              icon: Icons.email_outlined,
-              keyboardType: TextInputType.emailAddress,
-              validator: (v) {
-                if (v == null || v.isEmpty) return 'Informe seu email';
-                if (!v.contains('@')) return 'Email inválido';
-                return null;
-              },
-            ),
-
-            const SizedBox(height: 20),
-
-            _buildLabel('Telefone'),
-            const SizedBox(height: 8),
-            _buildInput(
-              controller: _telefoneController,
-              hint: '(11) 99999-9999',
-              icon: Icons.phone_outlined,
-              keyboardType: TextInputType.phone,
-              validator: (v) =>
-                  (v == null || v.isEmpty) ? 'Informe seu telefone' : null,
-            ),
-
-            // ── Campos extras — apenas socorrista ──
-            if (isSocorrista) ...[
-              const SizedBox(height: 32),
-              _buildSectionDivider('Dados profissionais'),
-              const SizedBox(height: 20),
-
-              // Tipo de atuação
-              _buildLabel('Tipo de atuação'),
-              const SizedBox(height: 12),
-              _buildTipoAtuacao(),
-
-              const SizedBox(height: 20),
-
-              // CPF / CNPJ dinâmico
-              _buildLabel(
-                  _tipoAtuacao == TipoAtuacao.empresa ? 'CNPJ' : 'CPF'),
-              const SizedBox(height: 8),
-              _buildInput(
-                controller: _cpfCnpjController,
-                hint: _tipoAtuacao == TipoAtuacao.empresa
-                    ? '00.000.000/0001-00'
-                    : '000.000.000-00',
-                icon: Icons.badge_outlined,
-                keyboardType: TextInputType.number,
-                validator: (v) {
-                  if (v == null || v.isEmpty) {
-                    return _tipoAtuacao == TipoAtuacao.empresa
-                        ? 'Informe o CNPJ'
-                        : 'Informe o CPF';
-                  }
-                  return null;
-                },
-              ),
-
-              const SizedBox(height: 24),
-
-              // Serviços oferecidos
-              _buildLabel('Serviços oferecidos'),
-              const SizedBox(height: 4),
-              const Text(
-                'Selecione todos os serviços que você pode prestar',
-                style: TextStyle(fontSize: 13, color: cinzaTexto),
-              ),
-              const SizedBox(height: 12),
-              _buildServicosGrid(),
-            ],
-
-            // ── Senha ──────────────────────────
-            const SizedBox(height: 32),
-            if (isSocorrista) _buildSectionDivider('Segurança'),
-            if (isSocorrista) const SizedBox(height: 20),
-
-            _buildLabel('Senha'),
-            const SizedBox(height: 8),
-            _buildInputSenha(
-              controller: _senhaController,
-              visivel: _senhaVisivel,
-              onToggle: () =>
-                  setState(() => _senhaVisivel = !_senhaVisivel),
-              validator: (v) {
-                if (v == null || v.isEmpty) return 'Informe sua senha';
-                if (v.length < 6) return 'Mínimo 6 caracteres';
-                return null;
-              },
-            ),
-
-            const SizedBox(height: 20),
-
-            _buildLabel('Confirmar senha'),
-            const SizedBox(height: 8),
-            _buildInputSenha(
-              controller: _confirmarSenhaController,
-              visivel: _confirmarSenhaVisivel,
-              onToggle: () => setState(
-                  () => _confirmarSenhaVisivel = !_confirmarSenhaVisivel),
-              validator: (v) {
-                if (v == null || v.isEmpty) return 'Confirme sua senha';
-                if (v != _senhaController.text)
-                  return 'As senhas não coincidem';
-                return null;
-              },
-            ),
-
-            const SizedBox(height: 36),
-
-            // Botão criar conta
-            SizedBox(
-              width: double.infinity,
-              height: 54,
-              child: ElevatedButton(
-                onPressed: _carregando ? null : _criarConta,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: azulPrincipal,
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: azulPrincipal.withOpacity(0.6),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                  elevation: 0,
-                ),
-                child: _carregando
-                    ? const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(
-                            color: Colors.white, strokeWidth: 2.5),
-                      )
-                    : const Text(
-                        'Criar conta',
-                        style: TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.w600),
-                      ),
-              ),
-            ),
-
-            const SizedBox(height: 24),
-
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Text('Já tem cadastro? ',
-                    style: TextStyle(fontSize: 14, color: cinzaTexto)),
-                GestureDetector(
-                  onTap: () => Navigator.pop(context),
-                  child: const Text(
-                    'Entrar',
-                    style: TextStyle(
-                        fontSize: 14,
-                        color: azulPrincipal,
-                        fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 48),
           ],
         ),
       ),
     );
   }
 
-  // ─── Tipo de atuação (pills) ───────────────
-  Widget _buildTipoAtuacao() {
-    const opcoes = [
-      (TipoAtuacao.autonomo, 'Autônomo'),
-      (TipoAtuacao.empresa,  'Empresa'),
-      (TipoAtuacao.pessoa,   'Pessoa disponível'),
-    ];
-
-    return Row(
-      children: opcoes.map((op) {
-        final (tipo, label) = op;
-        final ativo = _tipoAtuacao == tipo;
-        return Padding(
-          padding: const EdgeInsets.only(right: 8),
-          child: GestureDetector(
-            onTap: () => setState(() {
-              _tipoAtuacao = tipo;
-              _cpfCnpjController.clear();
-            }),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 160),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              decoration: BoxDecoration(
-                color: ativo ? azulPrincipal : cinzaFundo,
-                borderRadius: BorderRadius.circular(30),
-                border: Border.all(
-                  color: ativo ? azulPrincipal : cinzaBorda,
-                  width: 1.5,
-                ),
-              ),
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: ativo ? Colors.white : cinzaTexto,
-                ),
-              ),
-            ),
-          ),
-        );
-      }).toList(),
-    );
-  }
-
-  // ─── Grid de serviços ──────────────────────
-  Widget _buildServicosGrid() {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: kServicosDisponiveis.map((servico) {
-        final selecionado = _servicosSelecionados.contains(servico);
-        return GestureDetector(
-          onTap: () => setState(() {
-            if (selecionado) {
-              _servicosSelecionados.remove(servico);
-            } else {
-              _servicosSelecionados.add(servico);
-            }
-          }),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
-            padding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: selecionado
-                  ? azulPrincipal.withOpacity(0.1)
-                  : cinzaFundo,
-              borderRadius: BorderRadius.circular(30),
-              border: Border.all(
-                color: selecionado ? azulPrincipal : Colors.transparent,
-                width: 1.5,
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (selecionado) ...[
-                  const Icon(Icons.check_circle_rounded,
-                      color: azulPrincipal, size: 15),
-                  const SizedBox(width: 5),
-                ],
-                Text(
-                  servico,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: selecionado ? azulPrincipal : cinzaTexto,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      }).toList(),
-    );
-  }
-
-  // ─── Divisor de seção ─────────────────────
-  Widget _buildSectionDivider(String titulo) {
-    return Row(
-      children: [
-        Text(
-          titulo,
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
-            color: cinzaTexto,
-            letterSpacing: 0.5,
-          ),
-        ),
-        const SizedBox(width: 10),
-        const Expanded(child: Divider(color: Color(0xFFEEEEEE), thickness: 1)),
-      ],
-    );
-  }
-
-  // ─── Helpers de input ─────────────────────
-  Widget _buildLabel(String texto) => Text(
-        texto,
-        style: const TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w600,
-            color: pretoPrincipal),
-      );
-
-  Widget _buildInput({
-    required TextEditingController controller,
-    required String hint,
-    required IconData icon,
-    TextInputType keyboardType = TextInputType.text,
-    String? Function(String?)? validator,
+  Widget _buildTipoGuincho({
+    required String valor,
+    required String titulo,
+    required String subtitulo,
+    required IconData icone,
   }) {
-    return TextFormField(
-      controller: controller,
-      keyboardType: keyboardType,
-      style: const TextStyle(fontSize: 15, color: pretoPrincipal),
-      validator: validator,
-      decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: const TextStyle(color: cinzaTexto, fontSize: 15),
-        prefixIcon: Icon(icon, color: cinzaTexto, size: 20),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
-        filled: true,
-        fillColor: Colors.white,
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: cinzaBorda, width: 1.5),
+    final selecionado =
+        _tipoGuincho == valor;
+
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _tipoGuincho = valor;
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(
+          milliseconds: 180,
         ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide:
-              const BorderSide(color: azulPrincipal, width: 1.8),
+        padding: const EdgeInsets.all(
+          14,
         ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Colors.red, width: 1.5),
+        decoration: BoxDecoration(
+          color: selecionado
+              ? azulPrincipal.withValues(
+                  alpha: 0.08,
+                )
+              : Colors.white,
+          borderRadius: BorderRadius.circular(
+            14,
+          ),
+          border: Border.all(
+            color: selecionado
+                ? azulPrincipal
+                : const Color(
+                    0xFFDDDDDD,
+                  ),
+            width: selecionado
+                ? 1.8
+                : 1.2,
+          ),
         ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Colors.red, width: 1.8),
+        child: Column(
+          children: [
+            Icon(
+              icone,
+              color: selecionado
+                  ? azulPrincipal
+                  : pretoPrincipal,
+              size: 28,
+            ),
+            const SizedBox(
+              height: 8,
+            ),
+            Text(
+              titulo,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: selecionado
+                    ? azulPrincipal
+                    : pretoPrincipal,
+              ),
+            ),
+            const SizedBox(
+              height: 3,
+            ),
+            Text(
+              subtitulo,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 11,
+                color: cinzaTexto,
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildInputSenha({
-    required TextEditingController controller,
-    required bool visivel,
-    required VoidCallback onToggle,
-    String? Function(String?)? validator,
-  }) {
-    return TextFormField(
-      controller: controller,
-      obscureText: !visivel,
-      style: const TextStyle(fontSize: 15, color: pretoPrincipal),
-      validator: validator,
-      decoration: InputDecoration(
-        hintText: '••••••••',
-        hintStyle: const TextStyle(color: cinzaTexto, fontSize: 18),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
-        filled: true,
-        fillColor: Colors.white,
-        suffixIcon: IconButton(
-          icon: Icon(
-            visivel
-                ? Icons.visibility_off_outlined
-                : Icons.visibility_outlined,
-            color: cinzaTexto,
-            size: 20,
+  @override
+  Widget build(
+    BuildContext context,
+  ) {
+    return Scaffold(
+      backgroundColor:
+          Colors.white,
+      appBar: AppBar(
+        backgroundColor:
+            Colors.white,
+        elevation: 0,
+        centerTitle: true,
+        title:
+            const Text(
+          'Criar conta',
+          style:
+              TextStyle(
+            color:
+                pretoPrincipal,
+            fontWeight:
+                FontWeight.w700,
           ),
-          onPressed: onToggle,
         ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: cinzaBorda, width: 1.5),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide:
-              const BorderSide(color: azulPrincipal, width: 1.8),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Colors.red, width: 1.5),
-        ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Colors.red, width: 1.8),
+      ),
+      body:
+          SafeArea(
+        child:
+            SingleChildScrollView(
+          padding:
+              const EdgeInsets
+                  .fromLTRB(
+            28,
+            18,
+            28,
+            32,
+          ),
+          child: Form(
+            key:
+                _formKey,
+            child: Column(
+              children: [
+                Container(
+                  width: 72,
+                  height: 72,
+                  decoration:
+                      BoxDecoration(
+                    color:
+                        azulPrincipal
+                            .withValues(
+                      alpha: 0.1,
+                    ),
+                    shape:
+                        BoxShape.circle,
+                  ),
+                  child:
+                      const Icon(
+                    Icons
+                        .person_add_alt_1_rounded,
+                    color:
+                        azulPrincipal,
+                    size: 34,
+                  ),
+                ),
+
+                const SizedBox(
+                  height: 16,
+                ),
+
+                const Text(
+                  'Crie sua conta no Hook',
+                  style:
+                      TextStyle(
+                    fontSize: 23,
+                    fontWeight:
+                        FontWeight.bold,
+                    color:
+                        pretoPrincipal,
+                  ),
+                ),
+
+                const SizedBox(
+                  height: 6,
+                ),
+
+                const Text(
+                  'Depois enviaremos um código para confirmar seu e-mail.',
+                  textAlign:
+                      TextAlign.center,
+                  style:
+                      TextStyle(
+                    fontSize: 13,
+                    color:
+                        cinzaTexto,
+                  ),
+                ),
+
+                const SizedBox(
+                  height: 28,
+                ),
+
+                _label(
+                  'Tipo de conta',
+                ),
+
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildTipoConta(
+                        tipo: 'cliente',
+                        titulo: 'Cliente',
+                        subtitulo:
+                            'Preciso de socorro',
+                        icone:
+                            Icons.person_outline_rounded,
+                      ),
+                    ),
+
+                    const SizedBox(
+                      width: 12,
+                    ),
+
+                    Expanded(
+                      child: _buildTipoConta(
+                        tipo: 'motorista',
+                        titulo: 'Motorista',
+                        subtitulo:
+                            'Presto socorro',
+                        icone:
+                            Icons.local_shipping_outlined,
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(
+                  height: 24,
+                ),
+
+                _label(
+                  'Nome completo',
+                ),
+
+                TextFormField(
+                  controller:
+                      _nomeController,
+                  textCapitalization:
+                      TextCapitalization
+                          .words,
+                  decoration:
+                      _decoration(
+                    hint:
+                        'Seu nome completo',
+                  ),
+                  validator:
+                      (value) {
+                    if (value ==
+                            null ||
+                        value
+                            .trim()
+                            .isEmpty) {
+                      return 'Informe seu nome.';
+                    }
+
+                    return null;
+                  },
+                ),
+
+                const SizedBox(
+                  height: 18,
+                ),
+
+                _label(
+                  'E-mail',
+                ),
+
+                TextFormField(
+                  controller:
+                      _emailController,
+                  keyboardType:
+                      TextInputType
+                          .emailAddress,
+                  decoration:
+                      _decoration(
+                    hint:
+                        'nome@exemplo.com',
+                  ),
+                  validator:
+                      (value) {
+                    final email =
+                        value
+                            ?.trim() ??
+                            '';
+
+                    if (email
+                        .isEmpty) {
+                      return 'Informe seu e-mail.';
+                    }
+
+                    if (!email
+                            .contains(
+                          '@',
+                        ) ||
+                        !email
+                            .contains(
+                          '.',
+                        )) {
+                      return 'Informe um e-mail válido.';
+                    }
+
+                    return null;
+                  },
+                ),
+
+                const SizedBox(
+                  height: 18,
+                ),
+
+                _label(
+                  'Telefone',
+                ),
+
+                TextFormField(
+                  controller:
+                      _telefoneController,
+                  keyboardType:
+                      TextInputType.phone,
+                  inputFormatters: [
+                    FilteringTextInputFormatter
+                        .digitsOnly,
+                    TelefoneInputFormatter(),
+                  ],
+                  decoration:
+                      _decoration(
+                    hint:
+                        '(00) 00000-0000',
+                  ),
+                  validator:
+                      (value) {
+                    if (value ==
+                            null ||
+                        value
+                            .trim()
+                            .isEmpty) {
+                      return 'Informe seu telefone.';
+                    }
+
+                    final numeros =
+                        value.replaceAll(
+                      RegExp(r'\D'),
+                      '',
+                    );
+
+                    if (numeros.length !=
+                        11) {
+                      return 'Informe um celular válido.';
+                    }
+
+                    return null;
+                  },
+                ),
+
+                if (_tipoUsuario ==
+                    'motorista') ...[
+                  const SizedBox(
+                    height: 18,
+                  ),
+
+                  _label(
+                    'Placa do guincho',
+                  ),
+
+                  TextFormField(
+                    controller:
+                        _placaGuinchoController,
+                    textCapitalization:
+                        TextCapitalization
+                            .characters,
+                    inputFormatters: [
+                      FilteringTextInputFormatter
+                          .allow(
+                        RegExp(
+                          r'[A-Za-z0-9-]',
+                        ),
+                      ),
+                      LengthLimitingTextInputFormatter(
+                        8,
+                      ),
+                    ],
+                    decoration:
+                        _decoration(
+                      hint:
+                          'ABC1D23',
+                    ),
+                    validator:
+                        (value) {
+                      if (_tipoUsuario !=
+                          'motorista') {
+                        return null;
+                      }
+
+                      final placa =
+                          (value ?? '')
+                              .replaceAll(
+                        RegExp(
+                          r'[^A-Za-z0-9]',
+                        ),
+                        '',
+                      );
+
+                      if (placa.length !=
+                          7) {
+                        return 'Informe uma placa válida.';
+                      }
+
+                      return null;
+                    },
+                  ),
+
+                  const SizedBox(
+                    height: 18,
+                  ),
+
+                  _label(
+                    'Tipo de guincho',
+                  ),
+
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildTipoGuincho(
+                          valor: 'Leve',
+                          titulo: 'Guincho Leve',
+                          subtitulo:
+                              'Veículos de passeio',
+                          icone:
+                              Icons.local_shipping_outlined,
+                        ),
+                      ),
+
+                      const SizedBox(
+                        width: 12,
+                      ),
+
+                      Expanded(
+                        child: _buildTipoGuincho(
+                          valor: 'Pesado',
+                          titulo: 'Guincho Pesado',
+                          subtitulo:
+                              'Veículos maiores',
+                          icone:
+                              Icons.fire_truck_outlined,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+
+                const SizedBox(
+                  height: 18,
+                ),
+
+                _label(
+                  'Senha',
+                ),
+
+                TextFormField(
+                  controller:
+                      _senhaController,
+                  obscureText:
+                      !_senhaVisivel,
+                  decoration:
+                      _decoration(
+                    hint:
+                        '••••••••',
+                    suffixIcon:
+                        IconButton(
+                      onPressed:
+                          () {
+                        setState(
+                          () {
+                            _senhaVisivel =
+                                !_senhaVisivel;
+                          },
+                        );
+                      },
+                      icon: Icon(
+                        _senhaVisivel
+                            ? Icons
+                                .visibility_off_outlined
+                            : Icons
+                                .visibility_outlined,
+                        color:
+                            cinzaTexto,
+                      ),
+                    ),
+                  ),
+                  validator:
+                      (value) {
+                    if (value ==
+                            null ||
+                        value
+                            .isEmpty) {
+                      return 'Informe uma senha.';
+                    }
+
+                    if (value
+                            .length <
+                        6) {
+                      return 'A senha deve ter pelo menos 6 caracteres.';
+                    }
+
+                    return null;
+                  },
+                ),
+
+                const SizedBox(
+                  height: 18,
+                ),
+
+                _label(
+                  'Confirmar senha',
+                ),
+
+                TextFormField(
+                  controller:
+                      _confirmarSenhaController,
+                  obscureText:
+                      !_confirmarSenhaVisivel,
+                  decoration:
+                      _decoration(
+                    hint:
+                        '••••••••',
+                    suffixIcon:
+                        IconButton(
+                      onPressed:
+                          () {
+                        setState(
+                          () {
+                            _confirmarSenhaVisivel =
+                                !_confirmarSenhaVisivel;
+                          },
+                        );
+                      },
+                      icon: Icon(
+                        _confirmarSenhaVisivel
+                            ? Icons
+                                .visibility_off_outlined
+                            : Icons
+                                .visibility_outlined,
+                        color:
+                            cinzaTexto,
+                      ),
+                    ),
+                  ),
+                  validator:
+                      (value) {
+                    if (value !=
+                        _senhaController
+                            .text) {
+                      return 'As senhas não coincidem.';
+                    }
+
+                    return null;
+                  },
+                ),
+
+                const SizedBox(
+                  height: 28,
+                ),
+
+                SizedBox(
+                  width:
+                      double.infinity,
+                  height: 54,
+                  child:
+                      ElevatedButton(
+                    onPressed:
+                        _carregando
+                            ? null
+                            : _criarConta,
+                    style:
+                        ElevatedButton
+                            .styleFrom(
+                      backgroundColor:
+                          azulPrincipal,
+                      foregroundColor:
+                          Colors.white,
+                      shape:
+                          RoundedRectangleBorder(
+                        borderRadius:
+                            BorderRadius.circular(
+                          12,
+                        ),
+                      ),
+                      elevation:
+                          0,
+                    ),
+                    child:
+                        _carregando
+                            ? const SizedBox(
+                                width:
+                                    22,
+                                height:
+                                    22,
+                                child:
+                                    CircularProgressIndicator(
+                                  color:
+                                      Colors.white,
+                                  strokeWidth:
+                                      2.5,
+                                ),
+                              )
+                            : const Text(
+                                'Criar conta',
+                                style:
+                                    TextStyle(
+                                  fontSize:
+                                      16,
+                                  fontWeight:
+                                      FontWeight.w600,
+                                ),
+                              ),
+                  ),
+                ),
+
+                const SizedBox(
+                  height: 18,
+                ),
+
+                TextButton(
+                  onPressed:
+                      () {
+                    Navigator.pop(
+                      context,
+                    );
+                  },
+                  child:
+                      const Text(
+                    'Já tenho uma conta',
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
   }
 }
+
+// ============================================================
+// MÁSCARA DE TELEFONE
+// (00) 00000-0000
+// ============================================================
+
+class TelefoneInputFormatter
+    extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    var numeros =
+        newValue.text.replaceAll(
+      RegExp(r'\D'),
+      '',
+    );
+
+    if (numeros.length > 11) {
+      numeros =
+          numeros.substring(
+        0,
+        11,
+      );
+    }
+
+    String texto = '';
+
+    if (numeros.isNotEmpty) {
+      final fimDdd =
+          numeros.length < 2
+              ? numeros.length
+              : 2;
+
+      texto =
+          '(${numeros.substring(0, fimDdd)}';
+    }
+
+    if (numeros.length >= 2) {
+      texto += ') ';
+    }
+
+    if (numeros.length > 2) {
+      final fimNumero =
+          numeros.length < 7
+              ? numeros.length
+              : 7;
+
+      texto += numeros.substring(
+        2,
+        fimNumero,
+      );
+    }
+
+    if (numeros.length > 7) {
+      texto +=
+          '-${numeros.substring(7)}';
+    }
+
+    return TextEditingValue(
+      text: texto,
+      selection:
+          TextSelection.collapsed(
+        offset: texto.length,
+      ),
+    );
+  }
+}
+

@@ -2,6 +2,7 @@
 
 header('Content-Type: application/json; charset=utf-8');
 
+require_once __DIR__ . "/../cors.php";
 require_once __DIR__ . '/../config/banco.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'PUT' &&

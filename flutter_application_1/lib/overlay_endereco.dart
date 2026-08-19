@@ -35,17 +35,9 @@ class _EnderecoOverlayState extends State<EnderecoOverlay>
   late String _pontoEncontro;
   late TextEditingController _pontoController;
   bool _editando = false;
-  int _atalhoSelecionado = 0;
   Timer? _debounce;
   bool _buscandoEndereco = false;
 
-  final List<Map<String, dynamic>> _atalhos = [
-    {'icone': Icons.home_rounded, 'label': 'Casa'},
-    {'icone': Icons.work_rounded, 'label': 'Trabalho'},
-    {'icone': Icons.build_rounded, 'label': 'Oficina'},
-    {'icone': Icons.favorite_rounded, 'label': 'Favorito'},
-    {'icone': Icons.star_rounded, 'label': 'Salvo'},
-  ];
 
   @override
   void initState() {
@@ -330,79 +322,6 @@ class _EnderecoOverlayState extends State<EnderecoOverlay>
                                 ),
                             ],
                           ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 16),
-
-                      // Locais salvos
-                      const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 16),
-                        child: Text(
-                          'LOCAIS SALVOS',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: cinzaTexto,
-                            letterSpacing: 1.0,
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 10),
-
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Row(
-                          children: List.generate(_atalhos.length, (index) {
-                            final item = _atalhos[index];
-                            final selecionado = _atalhoSelecionado == index;
-                            return GestureDetector(
-                              onTap: () =>
-                                  setState(() => _atalhoSelecionado = index),
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 200),
-                                margin: EdgeInsets.only(
-                                    right: index < _atalhos.length - 1 ? 10 : 0),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 14, vertical: 12),
-                                decoration: BoxDecoration(
-                                  color: selecionado
-                                      ? pretoPrincipal
-                                      : const Color(0xFF1A3A5C),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(item['icone'] as IconData,
-                                        color: Colors.white, size: 18),
-                                    AnimatedSize(
-                                      duration: const Duration(milliseconds: 220),
-                                      curve: Curves.easeInOut,
-                                      child: selecionado
-                                          ? Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                const SizedBox(width: 6),
-                                                Text(
-                                                  item['label'] as String,
-                                                  style: const TextStyle(
-                                                    color: Colors.white,
-                                                    fontSize: 13,
-                                                    fontWeight: FontWeight.w600,
-                                                  ),
-                                                ),
-                                              ],
-                                            )
-                                          : const SizedBox.shrink(),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          }),
                         ),
                       ),
 

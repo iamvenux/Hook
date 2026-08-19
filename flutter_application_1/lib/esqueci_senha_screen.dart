@@ -1,349 +1,1081 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'api_service.dart';
+
 class EsqueciSenhaScreen extends StatefulWidget {
-  const EsqueciSenhaScreen({super.key});
+  const EsqueciSenhaScreen({
+    super.key,
+  });
 
   @override
-  State<EsqueciSenhaScreen> createState() => _EsqueciSenhaScreenState();
+  State<EsqueciSenhaScreen> createState() =>
+      _EsqueciSenhaScreenState();
 }
 
-class _EsqueciSenhaScreenState extends State<EsqueciSenhaScreen> {
-  static const Color azulPrincipal  = Color(0xFF1A7EF5);
-  static const Color cinzaTexto     = Color(0xFF8A8A8A);
-  static const Color pretoPrincipal = Color(0xFF1A1A1A);
+class _EsqueciSenhaScreenState
+    extends State<EsqueciSenhaScreen> {
+  static const Color azulPrincipal =
+      Color(0xFF1A7EF5);
 
-  // 0 = digitar email, 1 = digitar código, 2 = nova senha
+  static const Color pretoPrincipal =
+      Color(0xFF1A1A1A);
+
+  static const Color cinzaTexto =
+      Color(0xFF8A8A8A);
+
+  static const Color cinzaFundo =
+      Color(0xFFF5F5F5);
+
+  final _emailController =
+      TextEditingController();
+
+  final _codigoController =
+      TextEditingController();
+
+  final _novaSenhaController =
+      TextEditingController();
+
+  final _confirmarSenhaController =
+      TextEditingController();
+
   int _etapa = 0;
 
-  final _emailController     = TextEditingController();
-  final _novaSenhaController  = TextEditingController();
-  final _confirmarController  = TextEditingController();
-  final List<TextEditingController> _codigoControllers =
-      List.generate(6, (_) => TextEditingController());
-  final List<FocusNode> _codigoFocus =
-      List.generate(6, (_) => FocusNode());
+  bool _carregando = false;
+  bool _reenviando = false;
 
-  bool _novaSenhaVisivel     = false;
+  bool _senhaVisivel = false;
   bool _confirmarSenhaVisivel = false;
-  bool _carregando           = false;
+
+  String _email = '';
+  String _codigoValidado = '';
 
   @override
   void dispose() {
     _emailController.dispose();
+    _codigoController.dispose();
     _novaSenhaController.dispose();
-    _confirmarController.dispose();
-    for (final c in _codigoControllers) c.dispose();
-    for (final f in _codigoFocus) f.dispose();
+    _confirmarSenhaController.dispose();
+
     super.dispose();
   }
 
-  Future<void> _avancar() async {
-    setState(() => _carregando = true);
-    await Future.delayed(const Duration(seconds: 1)); // TODO: API
+  // ============================================================
+  // ETAPA 1 - ENVIAR CÓDIGO
+  // ============================================================
+
+  Future<void> _enviarCodigo() async {
+    final email =
+        _emailController.text.trim();
+
+    if (email.isEmpty ||
+        !email.contains('@') ||
+        !email.contains('.')) {
+      _mostrarMensagem(
+        'Informe um e-mail válido.',
+      );
+
+      return;
+    }
+
     setState(() {
-      _carregando = false;
-      if (_etapa < 2) _etapa++;
+      _carregando = true;
     });
-    if (_etapa == 1) {
-      Future.delayed(
-          const Duration(milliseconds: 100), () => _codigoFocus[0].requestFocus());
+
+    try {
+      final resposta =
+          await ApiService.instance
+              .solicitarRecuperacaoSenha(
+        email: email,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _email = email;
+        _carregando = false;
+        _etapa = 1;
+      });
+
+      _mostrarMensagem(
+        resposta['mensagem']
+                ?.toString() ??
+            'Se existir uma conta com este e-mail, enviaremos um código.',
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _carregando = false;
+      });
+
+      _mostrarMensagem(
+        e.mensagem,
+      );
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _carregando = false;
+      });
+
+      _mostrarMensagem(
+        'Não foi possível solicitar a recuperação da senha.',
+      );
     }
   }
 
-  Future<void> _redefinirSenha() async {
-    setState(() => _carregando = true);
-    await Future.delayed(const Duration(seconds: 1)); // TODO: API
-    setState(() => _carregando = false);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Senha redefinida com sucesso!')),
+  // ============================================================
+  // REENVIAR CÓDIGO
+  // ============================================================
+
+  Future<void> _reenviarCodigo() async {
+    if (_reenviando ||
+        _email.isEmpty) {
+      return;
+    }
+
+    setState(() {
+      _reenviando = true;
+    });
+
+    try {
+      /*
+       * IMPORTANTE:
+       * Reenviar no "Esqueci a senha" chama NOVAMENTE
+       * solicitar_recuperacao_senha.php.
+       *
+       * Não usa o endpoint de verificação de cadastro.
+       */
+      final resposta =
+          await ApiService.instance
+              .solicitarRecuperacaoSenha(
+        email: _email,
       );
-      Navigator.pop(context);
+
+      if (!mounted) return;
+
+      setState(() {
+        _reenviando = false;
+
+        // Limpa o código anterior para o usuário
+        // digitar o novo.
+        _codigoController.clear();
+      });
+
+      _mostrarMensagem(
+        resposta['mensagem']
+                ?.toString() ??
+            'Novo código enviado.',
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _reenviando = false;
+      });
+
+      _mostrarMensagem(
+        e.mensagem,
+      );
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _reenviando = false;
+      });
+
+      _mostrarMensagem(
+        'Não foi possível reenviar o código.',
+      );
     }
   }
+
+  // ============================================================
+  // ETAPA 2 - VALIDAR CÓDIGO
+  // ============================================================
+
+  Future<void> _validarCodigo() async {
+    final codigo =
+        _codigoController.text.trim();
+
+    if (codigo.length != 6) {
+      _mostrarMensagem(
+        'Digite o código de 6 dígitos.',
+      );
+
+      return;
+    }
+
+    setState(() {
+      _carregando = true;
+    });
+
+    try {
+      await ApiService.instance
+          .validarCodigoRecuperacao(
+        email: _email,
+        codigo: codigo,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _codigoValidado = codigo;
+        _carregando = false;
+        _etapa = 2;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _carregando = false;
+      });
+
+      _mostrarMensagem(
+        e.mensagem,
+      );
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _carregando = false;
+      });
+
+      _mostrarMensagem(
+        'Não foi possível validar o código.',
+      );
+    }
+  }
+
+  // ============================================================
+  // ETAPA 3 - NOVA SENHA
+  // ============================================================
+
+  Future<void> _alterarSenha() async {
+    final senha =
+        _novaSenhaController.text;
+
+    final confirmar =
+        _confirmarSenhaController.text;
+
+    if (senha.length < 6) {
+      _mostrarMensagem(
+        'A nova senha deve ter pelo menos 6 caracteres.',
+      );
+
+      return;
+    }
+
+    if (senha != confirmar) {
+      _mostrarMensagem(
+        'As senhas não coincidem.',
+      );
+
+      return;
+    }
+
+    setState(() {
+      _carregando = true;
+    });
+
+    try {
+      final resposta =
+          await ApiService.instance
+              .redefinirSenha(
+        email: _email,
+        codigo: _codigoValidado,
+        novaSenha: senha,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _carregando = false;
+      });
+
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) {
+          return AlertDialog(
+            icon: const Icon(
+              Icons.check_circle_rounded,
+              color: Colors.green,
+              size: 48,
+            ),
+            title: const Text(
+              'Senha alterada!',
+            ),
+            content: Text(
+              resposta['mensagem']
+                      ?.toString() ??
+                  'Sua senha foi alterada com sucesso. Faça login para continuar.',
+              textAlign: TextAlign.center,
+            ),
+            actionsAlignment:
+                MainAxisAlignment.center,
+            actions: [
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(
+                    context,
+                  );
+                },
+                child: const Text(
+                  'Ir para o login',
+                ),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (!mounted) return;
+
+      Navigator.of(context).popUntil(
+        (route) => route.isFirst,
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _carregando = false;
+      });
+
+      _mostrarMensagem(
+        e.mensagem,
+      );
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _carregando = false;
+      });
+
+      _mostrarMensagem(
+        'Não foi possível alterar sua senha.',
+      );
+    }
+  }
+
+  void _mostrarMensagem(
+    String mensagem,
+  ) {
+    ScaffoldMessenger.of(context)
+        .showSnackBar(
+      SnackBar(
+        content: Text(
+          mensagem,
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // BUILD
+  // ============================================================
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor:
+          Colors.white,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor:
+            Colors.white,
         elevation: 0,
-        leading: GestureDetector(
-          onTap: () {
-            if (_etapa > 0) {
-              setState(() => _etapa--);
-            } else {
-              Navigator.pop(context);
-            }
-          },
-          child: const Icon(Icons.arrow_back, color: pretoPrincipal),
+        centerTitle: true,
+        title: const Text(
+          'Recuperar senha',
+          style: TextStyle(
+            color:
+                pretoPrincipal,
+            fontWeight:
+                FontWeight.w700,
+          ),
         ),
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 32),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 8),
-
-              // Indicador de etapas
-              Row(
-                children: List.generate(3, (i) {
-                  final ativo     = i == _etapa;
-                  final concluido = i < _etapa;
-                  return Expanded(
-                    child: Container(
-                      margin: EdgeInsets.only(right: i < 2 ? 6 : 0),
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: concluido || ativo
-                            ? azulPrincipal
-                            : const Color(0xFFE5E5E5),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  );
-                }),
-              ),
-
-              const SizedBox(height: 28),
-
-              // Título e subtítulo dinâmicos
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 250),
-                child: Column(
-                  key: ValueKey(_etapa),
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _etapa == 0
-                          ? 'Esqueceu a senha?'
-                          : _etapa == 1
-                              ? 'Verifique seu email'
-                              : 'Nova senha',
-                      style: const TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        color: pretoPrincipal,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      _etapa == 0
-                          ? 'Informe seu email e enviaremos um código de verificação.'
-                          : _etapa == 1
-                              ? 'Enviamos um código de 6 dígitos para ${_emailController.text}.'
-                              : 'Escolha uma nova senha segura para sua conta.',
-                      style: const TextStyle(fontSize: 15, color: cinzaTexto),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 36),
-
-              // ── Etapa 0: Email ──────────────────────
-              if (_etapa == 0) ...[
-                _buildLabel('Email'),
-                const SizedBox(height: 8),
-                TextFormField(
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  style:
-                      const TextStyle(fontSize: 15, color: pretoPrincipal),
-                  decoration: _inputDecoration(
-                    hint: 'nome@exemplo.com',
-                    icon: Icons.email_outlined,
-                  ),
-                ),
-                const SizedBox(height: 32),
-                _buildBotao('Enviar código', _avancar),
-              ],
-
-              // ── Etapa 1: Código ─────────────────────
-              if (_etapa == 1) ...[
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: List.generate(6, (i) {
-                    return SizedBox(
-                      width: 46,
-                      height: 56,
-                      child: TextField(
-                        controller: _codigoControllers[i],
-                        focusNode: _codigoFocus[i],
-                        textAlign: TextAlign.center,
-                        keyboardType: TextInputType.number,
-                        maxLength: 1,
-                        style: const TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                            color: pretoPrincipal),
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly
-                        ],
-                        decoration: InputDecoration(
-                          counterText: '',
-                          filled: true,
-                          fillColor: const Color(0xFFF5F5F5),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide.none,
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(
-                                color: azulPrincipal, width: 1.8),
-                          ),
-                        ),
-                        onChanged: (v) {
-                          if (v.isNotEmpty && i < 5) {
-                            _codigoFocus[i + 1].requestFocus();
-                          } else if (v.isEmpty && i > 0) {
-                            _codigoFocus[i - 1].requestFocus();
-                          }
-                        },
-                      ),
-                    );
-                  }),
-                ),
-                const SizedBox(height: 24),
-                Center(
-                  child: GestureDetector(
-                    onTap: () {}, // TODO: reenviar código
-                    child: const Text(
-                      'Reenviar código',
-                      style: TextStyle(
-                          fontSize: 14,
-                          color: azulPrincipal,
-                          fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 32),
-                _buildBotao('Verificar código', _avancar),
-              ],
-
-              // ── Etapa 2: Nova senha ─────────────────
-              if (_etapa == 2) ...[
-                _buildLabel('Nova senha'),
-                const SizedBox(height: 8),
-                _buildInputSenha(
-                  controller: _novaSenhaController,
-                  visivel: _novaSenhaVisivel,
-                  onToggle: () =>
-                      setState(() => _novaSenhaVisivel = !_novaSenhaVisivel),
-                ),
-                const SizedBox(height: 20),
-                _buildLabel('Confirmar nova senha'),
-                const SizedBox(height: 8),
-                _buildInputSenha(
-                  controller: _confirmarController,
-                  visivel: _confirmarSenhaVisivel,
-                  onToggle: () => setState(
-                      () => _confirmarSenhaVisivel = !_confirmarSenhaVisivel),
-                ),
-                const SizedBox(height: 32),
-                _buildBotao('Redefinir senha', _redefinirSenha),
-              ],
-
-              const SizedBox(height: 40),
-            ],
+        child:
+            AnimatedSwitcher(
+          duration:
+              const Duration(
+            milliseconds: 250,
           ),
+          child:
+              _buildEtapaAtual(),
         ),
       ),
     );
   }
 
-  Widget _buildLabel(String texto) => Text(
-        texto,
-        style: const TextStyle(
-            fontSize: 15, fontWeight: FontWeight.w600, color: pretoPrincipal),
-      );
+  Widget _buildEtapaAtual() {
+    switch (_etapa) {
+      case 1:
+        return _buildCodigo();
 
-  InputDecoration _inputDecoration({required String hint, required IconData icon}) {
+      case 2:
+        return _buildNovaSenha();
+
+      case 0:
+      default:
+        return _buildEmail();
+    }
+  }
+
+  // ============================================================
+  // ETAPA EMAIL
+  // ============================================================
+
+  Widget _buildEmail() {
+    return SingleChildScrollView(
+      key:
+          const ValueKey(
+        'email',
+      ),
+      padding:
+          const EdgeInsets
+              .fromLTRB(
+        30,
+        32,
+        30,
+        32,
+      ),
+      child: Column(
+        children: [
+          _iconeTopo(
+            Icons
+                .lock_reset_rounded,
+          ),
+
+          const SizedBox(
+            height: 24,
+          ),
+
+          const Text(
+            'Esqueceu sua senha?',
+            textAlign:
+                TextAlign.center,
+            style:
+                TextStyle(
+              fontSize: 25,
+              fontWeight:
+                  FontWeight.bold,
+              color:
+                  pretoPrincipal,
+            ),
+          ),
+
+          const SizedBox(
+            height: 10,
+          ),
+
+          const Text(
+            'Informe o e-mail da sua conta e enviaremos um código para redefinir sua senha.',
+            textAlign:
+                TextAlign.center,
+            style:
+                TextStyle(
+              fontSize: 14,
+              height: 1.45,
+              color:
+                  cinzaTexto,
+            ),
+          ),
+
+          const SizedBox(
+            height: 32,
+          ),
+
+          Align(
+            alignment:
+                Alignment.centerLeft,
+            child:
+                const Text(
+              'E-mail',
+              style:
+                  TextStyle(
+                fontSize: 14,
+                fontWeight:
+                    FontWeight.w600,
+                color:
+                    pretoPrincipal,
+              ),
+            ),
+          ),
+
+          const SizedBox(
+            height: 8,
+          ),
+
+          TextField(
+            controller:
+                _emailController,
+            keyboardType:
+                TextInputType
+                    .emailAddress,
+            decoration:
+                _inputDecoration(
+              hint:
+                  'nome@exemplo.com',
+            ),
+          ),
+
+          const SizedBox(
+            height: 26,
+          ),
+
+          _botaoPrincipal(
+            texto:
+                'Enviar código',
+            carregando:
+                _carregando,
+            onPressed:
+                _enviarCodigo,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // ETAPA CÓDIGO
+  //
+  // MESMO PADRÃO VISUAL DA CONFIRMAÇÃO DE CADASTRO
+  // ============================================================
+
+  Widget _buildCodigo() {
+    return SingleChildScrollView(
+      key:
+          const ValueKey(
+        'codigo',
+      ),
+      padding:
+          const EdgeInsets
+              .fromLTRB(
+        30,
+        32,
+        30,
+        32,
+      ),
+      child: Column(
+        children: [
+          _iconeTopo(
+            Icons
+                .mark_email_read_outlined,
+          ),
+
+          const SizedBox(
+            height: 24,
+          ),
+
+          const Text(
+            'Confira seu e-mail',
+            style:
+                TextStyle(
+              fontSize: 25,
+              fontWeight:
+                  FontWeight.bold,
+              color:
+                  pretoPrincipal,
+            ),
+          ),
+
+          const SizedBox(
+            height: 10,
+          ),
+
+          const Text(
+            'Enviamos um código de 6 dígitos para',
+            textAlign:
+                TextAlign.center,
+            style:
+                TextStyle(
+              color:
+                  cinzaTexto,
+              fontSize: 14,
+            ),
+          ),
+
+          const SizedBox(
+            height: 4,
+          ),
+
+          Text(
+            _email,
+            textAlign:
+                TextAlign.center,
+            style:
+                const TextStyle(
+              color:
+                  azulPrincipal,
+              fontWeight:
+                  FontWeight.w700,
+              fontSize: 14,
+            ),
+          ),
+
+          const SizedBox(
+            height: 32,
+          ),
+
+          TextField(
+            controller:
+                _codigoController,
+            autofocus:
+                true,
+            textAlign:
+                TextAlign.center,
+            keyboardType:
+                TextInputType.number,
+            maxLength: 6,
+            inputFormatters: [
+              FilteringTextInputFormatter
+                  .digitsOnly,
+            ],
+            style:
+                const TextStyle(
+              fontSize: 28,
+              fontWeight:
+                  FontWeight.bold,
+              letterSpacing: 10,
+            ),
+            decoration:
+                InputDecoration(
+              counterText: '',
+              hintText:
+                  '000000',
+              hintStyle:
+                  TextStyle(
+                color:
+                    Colors.grey
+                        .shade300,
+                letterSpacing:
+                    10,
+              ),
+              filled: true,
+              fillColor:
+                  cinzaFundo,
+              contentPadding:
+                  const EdgeInsets
+                      .symmetric(
+                vertical: 20,
+              ),
+              border:
+                  OutlineInputBorder(
+                borderRadius:
+                    BorderRadius
+                        .circular(
+                  14,
+                ),
+                borderSide:
+                    BorderSide.none,
+              ),
+              focusedBorder:
+                  OutlineInputBorder(
+                borderRadius:
+                    BorderRadius
+                        .circular(
+                  14,
+                ),
+                borderSide:
+                    const BorderSide(
+                  color:
+                      azulPrincipal,
+                  width: 1.7,
+                ),
+              ),
+            ),
+          ),
+
+          const SizedBox(
+            height: 24,
+          ),
+
+          _botaoPrincipal(
+            texto:
+                'Confirmar código',
+            carregando:
+                _carregando,
+            onPressed:
+                _validarCodigo,
+          ),
+
+          const SizedBox(
+            height: 18,
+          ),
+
+          const Text(
+            'Não recebeu o código?',
+            style:
+                TextStyle(
+              fontSize: 13,
+              color:
+                  cinzaTexto,
+            ),
+          ),
+
+          TextButton(
+            onPressed:
+                _reenviando
+                    ? null
+                    : _reenviarCodigo,
+            child: Text(
+              _reenviando
+                  ? 'Enviando...'
+                  : 'Reenviar código',
+            ),
+          ),
+
+          const SizedBox(
+            height: 8,
+          ),
+
+          const Text(
+            'O código expira em 10 minutos.',
+            style:
+                TextStyle(
+              fontSize: 12,
+              color:
+                  cinzaTexto,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // ETAPA NOVA SENHA
+  // ============================================================
+
+  Widget _buildNovaSenha() {
+    return SingleChildScrollView(
+      key:
+          const ValueKey(
+        'novaSenha',
+      ),
+      padding:
+          const EdgeInsets
+              .fromLTRB(
+        30,
+        32,
+        30,
+        32,
+      ),
+      child: Column(
+        children: [
+          _iconeTopo(
+            Icons
+                .password_rounded,
+          ),
+
+          const SizedBox(
+            height: 24,
+          ),
+
+          const Text(
+            'Crie uma nova senha',
+            textAlign:
+                TextAlign.center,
+            style:
+                TextStyle(
+              fontSize: 25,
+              fontWeight:
+                  FontWeight.bold,
+              color:
+                  pretoPrincipal,
+            ),
+          ),
+
+          const SizedBox(
+            height: 10,
+          ),
+
+          const Text(
+            'Escolha uma nova senha para acessar sua conta.',
+            textAlign:
+                TextAlign.center,
+            style:
+                TextStyle(
+              fontSize: 14,
+              color:
+                  cinzaTexto,
+            ),
+          ),
+
+          const SizedBox(
+            height: 32,
+          ),
+
+          const Align(
+            alignment:
+                Alignment.centerLeft,
+            child: Text(
+              'Nova senha',
+              style:
+                  TextStyle(
+                fontSize: 14,
+                fontWeight:
+                    FontWeight.w600,
+                color:
+                    pretoPrincipal,
+              ),
+            ),
+          ),
+
+          const SizedBox(
+            height: 8,
+          ),
+
+          TextField(
+            controller:
+                _novaSenhaController,
+            obscureText:
+                !_senhaVisivel,
+            decoration:
+                _inputDecoration(
+              hint:
+                  '••••••••',
+              suffixIcon:
+                  IconButton(
+                onPressed:
+                    () {
+                  setState(
+                    () {
+                      _senhaVisivel =
+                          !_senhaVisivel;
+                    },
+                  );
+                },
+                icon: Icon(
+                  _senhaVisivel
+                      ? Icons
+                          .visibility_off_outlined
+                      : Icons
+                          .visibility_outlined,
+                  color:
+                      cinzaTexto,
+                ),
+              ),
+            ),
+          ),
+
+          const SizedBox(
+            height: 18,
+          ),
+
+          const Align(
+            alignment:
+                Alignment.centerLeft,
+            child: Text(
+              'Confirmar senha',
+              style:
+                  TextStyle(
+                fontSize: 14,
+                fontWeight:
+                    FontWeight.w600,
+                color:
+                    pretoPrincipal,
+              ),
+            ),
+          ),
+
+          const SizedBox(
+            height: 8,
+          ),
+
+          TextField(
+            controller:
+                _confirmarSenhaController,
+            obscureText:
+                !_confirmarSenhaVisivel,
+            decoration:
+                _inputDecoration(
+              hint:
+                  '••••••••',
+              suffixIcon:
+                  IconButton(
+                onPressed:
+                    () {
+                  setState(
+                    () {
+                      _confirmarSenhaVisivel =
+                          !_confirmarSenhaVisivel;
+                    },
+                  );
+                },
+                icon: Icon(
+                  _confirmarSenhaVisivel
+                      ? Icons
+                          .visibility_off_outlined
+                      : Icons
+                          .visibility_outlined,
+                  color:
+                      cinzaTexto,
+                ),
+              ),
+            ),
+          ),
+
+          const SizedBox(
+            height: 28,
+          ),
+
+          _botaoPrincipal(
+            texto:
+                'Alterar senha',
+            carregando:
+                _carregando,
+            onPressed:
+                _alterarSenha,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _iconeTopo(
+    IconData icone,
+  ) {
+    return Container(
+      width: 86,
+      height: 86,
+      decoration:
+          BoxDecoration(
+        color:
+            azulPrincipal
+                .withValues(
+          alpha: 0.1,
+        ),
+        shape:
+            BoxShape.circle,
+      ),
+      child: Icon(
+        icone,
+        size: 40,
+        color:
+            azulPrincipal,
+      ),
+    );
+  }
+
+  Widget _botaoPrincipal({
+    required String texto,
+    required bool carregando,
+    required VoidCallback onPressed,
+  }) {
+    return SizedBox(
+      width:
+          double.infinity,
+      height: 54,
+      child:
+          ElevatedButton(
+        onPressed:
+            carregando
+                ? null
+                : onPressed,
+        style:
+            ElevatedButton
+                .styleFrom(
+          backgroundColor:
+              azulPrincipal,
+          foregroundColor:
+              Colors.white,
+          disabledBackgroundColor:
+              azulPrincipal
+                  .withValues(
+            alpha: 0.6,
+          ),
+          elevation: 0,
+          shape:
+              RoundedRectangleBorder(
+            borderRadius:
+                BorderRadius
+                    .circular(
+              12,
+            ),
+          ),
+        ),
+        child:
+            carregando
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child:
+                        CircularProgressIndicator(
+                      color:
+                          Colors.white,
+                      strokeWidth:
+                          2.5,
+                    ),
+                  )
+                : Text(
+                    texto,
+                    style:
+                        const TextStyle(
+                      fontSize:
+                          16,
+                      fontWeight:
+                          FontWeight.w600,
+                    ),
+                  ),
+      ),
+    );
+  }
+
+  InputDecoration _inputDecoration({
+    required String hint,
+    Widget? suffixIcon,
+  }) {
     return InputDecoration(
       hintText: hint,
-      hintStyle: const TextStyle(color: cinzaTexto, fontSize: 15),
-      prefixIcon: Icon(icon, color: cinzaTexto, size: 20),
-      contentPadding:
-          const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
+      hintStyle:
+          const TextStyle(
+        color:
+            cinzaTexto,
+      ),
+      suffixIcon:
+          suffixIcon,
       filled: true,
-      fillColor: Colors.white,
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFFDDDDDD), width: 1.5),
+      fillColor:
+          Colors.white,
+      contentPadding:
+          const EdgeInsets
+              .symmetric(
+        horizontal: 18,
+        vertical: 18,
       ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: azulPrincipal, width: 1.8),
-      ),
-    );
-  }
-
-  Widget _buildInputSenha({
-    required TextEditingController controller,
-    required bool visivel,
-    required VoidCallback onToggle,
-  }) {
-    return TextField(
-      controller: controller,
-      obscureText: !visivel,
-      style: const TextStyle(fontSize: 15, color: pretoPrincipal),
-      decoration: InputDecoration(
-        hintText: '••••••••',
-        hintStyle: const TextStyle(color: cinzaTexto, fontSize: 18),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
-        filled: true,
-        fillColor: Colors.white,
-        suffixIcon: IconButton(
-          icon: Icon(
-            visivel ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-            color: cinzaTexto,
-            size: 20,
+      enabledBorder:
+          OutlineInputBorder(
+        borderRadius:
+            BorderRadius.circular(
+          12,
+        ),
+        borderSide:
+            const BorderSide(
+          color:
+              Color(
+            0xFFDDDDDD,
           ),
-          onPressed: onToggle,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFDDDDDD), width: 1.5),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: azulPrincipal, width: 1.8),
+          width: 1.5,
         ),
       ),
-    );
-  }
-
-  Widget _buildBotao(String label, VoidCallback onPressed) {
-    return SizedBox(
-      width: double.infinity,
-      height: 54,
-      child: ElevatedButton(
-        onPressed: _carregando ? null : onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: azulPrincipal,
-          foregroundColor: Colors.white,
-          disabledBackgroundColor: azulPrincipal.withOpacity(0.6),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          elevation: 0,
+      focusedBorder:
+          OutlineInputBorder(
+        borderRadius:
+            BorderRadius.circular(
+          12,
         ),
-        child: _carregando
-            ? const SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(
-                    color: Colors.white, strokeWidth: 2.5),
-              )
-            : Text(label,
-                style: const TextStyle(
-                    fontSize: 16, fontWeight: FontWeight.w600)),
+        borderSide:
+            const BorderSide(
+          color:
+              azulPrincipal,
+          width: 1.8,
+        ),
       ),
     );
   }

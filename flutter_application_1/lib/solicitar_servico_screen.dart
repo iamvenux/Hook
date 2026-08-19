@@ -126,6 +126,11 @@ class _ResumoServicoScreenState
 
   String _formaPagamento = 'Pix';
 
+  bool _precisaTroco = false;
+
+  final TextEditingController _trocoController =
+      TextEditingController();
+
   late String _endereco;
   late LatLng _coordenada;
 
@@ -152,7 +157,27 @@ class _ResumoServicoScreenState
   @override
   void dispose() {
     _descricaoController.dispose();
+    _trocoController.dispose();
     super.dispose();
+  }
+
+  double? _parseValorMonetario(String valor) {
+    var texto = valor
+        .trim()
+        .replaceAll('R\$', '')
+        .replaceAll(' ', '');
+
+    if (texto.isEmpty) {
+      return null;
+    }
+
+    if (texto.contains(',')) {
+      texto = texto
+          .replaceAll('.', '')
+          .replaceAll(',', '.');
+    }
+
+    return double.tryParse(texto);
   }
 
   Future<void> _confirmarSolicitacao() async {
@@ -178,6 +203,47 @@ class _ResumoServicoScreenState
       return;
     }
 
+    double? trocoPara;
+
+    if (_formaPagamento == 'Dinheiro' &&
+        _precisaTroco) {
+      trocoPara = _parseValorMonetario(
+        _trocoController.text,
+      );
+
+      if (trocoPara == null ||
+          trocoPara <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Informe para quanto precisa de troco.',
+            ),
+          ),
+        );
+
+        return;
+      }
+
+      final valorEstimado =
+          _parseValorMonetario(
+        _servico.valorEstimado,
+      );
+
+      if (valorEstimado != null &&
+          trocoPara <= valorEstimado) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'O valor para troco deve ser maior que '
+              '${_servico.valorEstimado}.',
+            ),
+          ),
+        );
+
+        return;
+      }
+    }
+
     setState(() {
       _enviando = true;
     });
@@ -191,6 +257,15 @@ class _ResumoServicoScreenState
         endereco: _endereco,
         latitude: _coordenada.latitude,
         longitude: _coordenada.longitude,
+        precisaTroco:
+            _formaPagamento == 'Dinheiro'
+                ? _precisaTroco
+                : false,
+        trocoPara:
+            _formaPagamento == 'Dinheiro' &&
+                    _precisaTroco
+                ? trocoPara
+                : null,
       );
 
       if (!mounted) return;
@@ -777,6 +852,161 @@ class _ResumoServicoScreenState
                       ),
                     ),
 
+                    if (_formaPagamento == 'Dinheiro') ...[
+                      const SizedBox(height: 12),
+
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius:
+                              BorderRadius.circular(16),
+                        ),
+                        child: Column(
+                          crossAxisAlignment:
+                              CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  width: 40,
+                                  height: 40,
+                                  decoration: BoxDecoration(
+                                    color: cinzaFundo,
+                                    borderRadius:
+                                        BorderRadius.circular(10),
+                                  ),
+                                  child: const Icon(
+                                    Icons
+                                        .currency_exchange_rounded,
+                                    color: pretoPrincipal,
+                                    size: 21,
+                                  ),
+                                ),
+
+                                const SizedBox(width: 12),
+
+                                const Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Precisa de troco?',
+                                        style: TextStyle(
+                                          fontSize: 15,
+                                          fontWeight:
+                                              FontWeight.w600,
+                                          color:
+                                              pretoPrincipal,
+                                        ),
+                                      ),
+                                      SizedBox(height: 2),
+                                      Text(
+                                        'Informe se o motorista deve levar troco',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: cinzaTexto,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+
+                                Switch(
+                                  value: _precisaTroco,
+                                  activeTrackColor:
+                                      azulPrincipal.withValues(
+                                    alpha: 0.45,
+                                  ),
+                                  activeThumbColor:
+                                      azulPrincipal,
+                                  onChanged: (valor) {
+                                    setState(() {
+                                      _precisaTroco =
+                                          valor;
+
+                                      if (!valor) {
+                                        _trocoController
+                                            .clear();
+                                      }
+                                    });
+                                  },
+                                ),
+                              ],
+                            ),
+
+                            if (_precisaTroco) ...[
+                              const SizedBox(height: 14),
+
+                              TextField(
+                                controller:
+                                    _trocoController,
+                                keyboardType:
+                                    const TextInputType
+                                        .numberWithOptions(
+                                  decimal: true,
+                                ),
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  color: pretoPrincipal,
+                                ),
+                                decoration:
+                                    InputDecoration(
+                                  labelText:
+                                      'Troco para quanto?',
+                                  hintText: 'Ex: 500,00',
+                                  prefixText: 'R\$ ',
+                                  filled: true,
+                                  fillColor: cinzaFundo,
+                                  labelStyle:
+                                      const TextStyle(
+                                    color: cinzaTexto,
+                                  ),
+                                  hintStyle:
+                                      const TextStyle(
+                                    color: cinzaTexto,
+                                  ),
+                                  enabledBorder:
+                                      OutlineInputBorder(
+                                    borderRadius:
+                                        BorderRadius.circular(
+                                      12,
+                                    ),
+                                    borderSide:
+                                        BorderSide.none,
+                                  ),
+                                  focusedBorder:
+                                      OutlineInputBorder(
+                                    borderRadius:
+                                        BorderRadius.circular(
+                                      12,
+                                    ),
+                                    borderSide:
+                                        const BorderSide(
+                                      color:
+                                          azulPrincipal,
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                ),
+                              ),
+
+                              const SizedBox(height: 8),
+
+                              const Text(
+                                'Exemplo: se você vai pagar com R\$ 500,00, informe 500,00.',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: cinzaTexto,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+
                     const SizedBox(height: 20),
 
                     SafeArea(
@@ -884,6 +1114,12 @@ class _ResumoServicoScreenState
                   onTap: () {
                     setState(() {
                       _formaPagamento = e.key;
+
+                      if (_formaPagamento !=
+                          'Dinheiro') {
+                        _precisaTroco = false;
+                        _trocoController.clear();
+                      }
                     });
 
                     Navigator.pop(context);

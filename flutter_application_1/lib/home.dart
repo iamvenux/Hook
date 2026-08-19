@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
 
 import 'overlay_endereco.dart';
 import 'adicionar_veiculo_screen.dart';
 import 'solicitar_servico_screen.dart';
 import 'perfil_cliente_screen.dart';
 import 'api_service.dart';
+import 'veiculos_screen.dart';
+import 'historico_cliente_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
@@ -33,14 +37,19 @@ class _HomeScreenState
 
   int _navSelecionado = 0;
 
+  int _veiculosRefresh = 0;
+  int _historicoRefresh = 0;
+
   int _tipoReboque = 0;
 
   int _veiculoSelecionado = 0;
 
   String _enderecoAtual =
-      'Av. Paulista, 1200';
+      'Obtendo sua localização...';
 
   LatLng? _coordenadaAtual;
+
+  bool _carregandoLocalizacao = true;
 
   bool _carregandoVeiculos = true;
 
@@ -58,6 +67,160 @@ class _HomeScreenState
     super.initState();
 
     _carregarVeiculos();
+    _carregarLocalizacaoAtual();
+  }
+
+  // ============================================================
+  // LOCALIZAÇÃO ATUAL DO CLIENTE
+  // ============================================================
+
+  Future<void> _carregarLocalizacaoAtual() async {
+    try {
+      final servicoAtivo =
+          await Geolocator.isLocationServiceEnabled();
+
+      if (!servicoAtivo) {
+        if (!mounted) return;
+
+        setState(() {
+          _enderecoAtual =
+              'Ative a localização do dispositivo';
+          _carregandoLocalizacao = false;
+        });
+
+        return;
+      }
+
+      var permissao =
+          await Geolocator.checkPermission();
+
+      if (permissao ==
+          LocationPermission.denied) {
+        permissao =
+            await Geolocator.requestPermission();
+      }
+
+      if (permissao ==
+              LocationPermission.denied ||
+          permissao ==
+              LocationPermission.deniedForever) {
+        if (!mounted) return;
+
+        setState(() {
+          _enderecoAtual =
+              'Permissão de localização necessária';
+          _carregandoLocalizacao = false;
+        });
+
+        return;
+      }
+
+      final position =
+          await Geolocator.getCurrentPosition(
+        locationSettings:
+            const LocationSettings(
+          accuracy: LocationAccuracy.bestForNavigation,
+          distanceFilter: 0,
+        ),
+      );
+
+      final coordenada = LatLng(
+        position.latitude,
+        position.longitude,
+      );
+
+      String endereco =
+          'Localização atual';
+
+      try {
+        final placemarks =
+            await placemarkFromCoordinates(
+          position.latitude,
+          position.longitude,
+        );
+
+        if (placemarks.isNotEmpty) {
+          final p =
+              placemarks.first;
+
+        final rua =
+            p.thoroughfare?.trim() ?? '';
+
+        final numero =
+            p.subThoroughfare?.trim() ?? '';
+
+        final bairro =
+            p.subLocality?.trim() ?? '';
+
+        final cidade =
+            p.locality?.trim() ?? '';
+
+        final estado =
+            p.administrativeArea?.trim() ?? '';
+
+        final cep =
+            p.postalCode?.trim() ?? '';
+
+        final partes = <String>[];
+
+        if (rua.isNotEmpty) {
+          if (numero.isNotEmpty) {
+            partes.add('$rua, $numero');
+          } else {
+            partes.add(rua);
+          }
+        }
+
+        if (bairro.isNotEmpty) {
+          partes.add(bairro);
+        }
+
+        if (cidade.isNotEmpty) {
+          if (estado.isNotEmpty) {
+            partes.add('$cidade - $estado');
+          } else {
+            partes.add(cidade);
+          }
+        }
+
+        if (cep.isNotEmpty) {
+          partes.add('CEP $cep');
+        }
+
+        if (partes.isNotEmpty) {
+          endereco = partes.join(', ');
+        }
+
+          if (partes.isNotEmpty) {
+            endereco =
+                partes.join(', ');
+          }
+        }
+      } catch (_) {
+        // Mantém "Localização atual" se
+        // o endereço não puder ser convertido.
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        _coordenadaAtual =
+            coordenada;
+        _enderecoAtual =
+            endereco;
+        _carregandoLocalizacao =
+            false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _enderecoAtual =
+            'Não foi possível obter sua localização';
+        _carregandoLocalizacao =
+            false;
+      });
+    }
   }
 
   // ============================================================
@@ -73,25 +236,27 @@ class _HomeScreenState
     }
 
     try {
-      final lista =
-          await ApiService.instance
-              .listarVeiculos();
+      final lista = await ApiService.instance.listarVeiculos();
 
       if (!mounted) return;
 
+      int selecionado = 0;
+
+      final indicePadrao = lista.indexWhere(
+        (v) => v['padrao'].toString() == '1',
+      );
+
+      if (indicePadrao >= 0) {
+        selecionado = indicePadrao;
+      } else if (_veiculoSelecionado < lista.length) {
+        selecionado = _veiculoSelecionado;
+      }
+
       setState(() {
         _veiculos = lista;
-
+        _veiculoSelecionado = lista.isEmpty ? 0 : selecionado;
         _carregandoVeiculos = false;
-
         _erroVeiculos = false;
-
-        if (_veiculos.isEmpty) {
-          _veiculoSelecionado = 0;
-        } else if (_veiculoSelecionado >=
-            _veiculos.length) {
-          _veiculoSelecionado = 0;
-        }
       });
     } on ApiException catch (e) {
       if (!mounted) return;
@@ -101,12 +266,9 @@ class _HomeScreenState
         _erroVeiculos = true;
       });
 
-      ScaffoldMessenger.of(context)
-          .showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            e.mensagem,
-          ),
+          content: Text(e.mensagem),
         ),
       );
     } catch (_) {
@@ -117,8 +279,7 @@ class _HomeScreenState
         _erroVeiculos = true;
       });
 
-      ScaffoldMessenger.of(context)
-          .showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
             'Não foi possível carregar os veículos.',
@@ -159,103 +320,78 @@ class _HomeScreenState
   Widget build(
     BuildContext context,
   ) {
-    if (_navSelecionado == 3) {
-      return Scaffold(
-        backgroundColor:
-            Colors.white,
-        body: const SafeArea(
-          child:
-              PerfilClienteScreen(),
-        ),
-        bottomNavigationBar:
-            _buildBottomNav(),
-      );
-    }
-
     return Scaffold(
-      backgroundColor:
-          Colors.white,
-      body: SafeArea(
-        child: Column(
-          crossAxisAlignment:
-              CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding:
-                  const EdgeInsets
-                      .fromLTRB(
-                24,
-                32,
-                24,
-                0,
-              ),
-              child: Column(
-                crossAxisAlignment:
-                    CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Seja Bem-vindo(a)',
-                    style:
-                        TextStyle(
-                      fontSize: 26,
-                      fontWeight:
-                          FontWeight.bold,
-                      color:
-                          pretoPrincipal,
-                      letterSpacing:
-                          -0.5,
-                    ),
-                  ),
+      backgroundColor: Colors.white,
+      body: IndexedStack(
+        index: _navSelecionado,
+        children: [
+          _buildInicio(),
 
-                  const SizedBox(
-                    height: 4,
-                  ),
+          VeiculosScreen(
+            key: ValueKey(_veiculosRefresh),
+          ),
 
-                  const Text(
-                    'Como posso te ajudar hoje ?',
-                    style:
-                        TextStyle(
-                      fontSize: 14,
-                      color:
-                          cinzaTexto,
-                    ),
-                  ),
+          HistoricoClienteScreen(
+            key: ValueKey(_historicoRefresh),
+          ),
 
-                  const SizedBox(
-                    height: 20,
-                  ),
+          const PerfilClienteScreen(),
+        ],
+      ),
+      bottomNavigationBar: _buildBottomNav(),
+    );
+  }
 
-                  const Divider(
-                    color:
-                        Color(
-                      0xFFEEEEEE,
-                    ),
-                    thickness: 1,
-                  ),
-
-                  const SizedBox(
-                    height: 20,
-                  ),
-                ],
-              ),
+  Widget _buildInicio() {
+    return SafeArea(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              24,
+              32,
+              24,
+              0,
             ),
-
-            Expanded(
-              child:
-                  SingleChildScrollView(
-                padding:
-                    const EdgeInsets
-                        .symmetric(
-                  horizontal: 24,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Seja Bem-vindo(a)',
+                  style: TextStyle(
+                    fontSize: 26,
+                    fontWeight: FontWeight.bold,
+                    color: pretoPrincipal,
+                    letterSpacing: -0.5,
+                  ),
                 ),
-                child:
-                    _buildConteudoResgate(),
-              ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Como posso te ajudar hoje ?',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: cinzaTexto,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                const Divider(
+                  color: Color(0xFFEEEEEE),
+                  thickness: 1,
+                ),
+                const SizedBox(height: 20),
+              ],
             ),
-
-            _buildBottomNav(),
-          ],
-        ),
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 24,
+              ),
+              child: _buildConteudoResgate(),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -365,7 +501,18 @@ class _HomeScreenState
                 ),
               ),
 
-              GestureDetector(
+              if (_carregandoLocalizacao)
+                const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child:
+                      CircularProgressIndicator(
+                    strokeWidth: 2.2,
+                    color: azulPrincipal,
+                  ),
+                )
+              else
+                GestureDetector(
                 onTap: () async {
                   final resultado =
                       await showGeneralDialog<
@@ -734,6 +881,9 @@ class _HomeScreenState
         final selecionado =
             _veiculoSelecionado == index;
 
+        final padrao =
+            v['padrao'].toString() == '1';
+
         final nome =
             '${v['marca'] ?? ''} ${v['modelo'] ?? ''}'.trim();
 
@@ -799,7 +949,7 @@ class _HomeScreenState
                       ),
                     ),
 
-                    if (index == 0)
+                    if (padrao)
                       Container(
                         padding:
                             const EdgeInsets.symmetric(
@@ -916,11 +1066,20 @@ class _HomeScreenState
     }
 
     final coordenada =
-        _coordenadaAtual ??
-            const LatLng(
-              -23.5650,
-              -46.6520,
-            );
+        _coordenadaAtual;
+
+    if (coordenada == null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Aguarde a localização atual ou selecione um ponto de encontro.',
+          ),
+        ),
+      );
+
+      return;
+    }
 
     const tiposReboque = [
       'Guincho Leve',
@@ -1185,89 +1344,63 @@ class _HomeScreenState
   Widget _buildBottomNav() {
     return SizedBox(
       height: 80,
-
-      child:
-          BottomNavigationBar(
-        currentIndex:
-            _navSelecionado,
-
-        onTap: (index) {
+      child: BottomNavigationBar(
+        currentIndex: _navSelecionado,
+        onTap: (index) async {
           setState(() {
-            _navSelecionado =
-                index;
+            _navSelecionado = index;
+
+            if (index == 1) {
+              _veiculosRefresh++;
+            }
+
+            if (index == 2) {
+              _historicoRefresh++;
+            }
           });
+
+          if (index == 0) {
+            await _carregarVeiculos();
+          }
         },
-
-        type:
-            BottomNavigationBarType
-                .fixed,
-
-        backgroundColor:
-            pretoPrincipal,
-
-        selectedItemColor:
-            azulPrincipal,
-
-        unselectedItemColor:
-            Colors.grey
-                .shade400,
-
-        selectedLabelStyle:
-            const TextStyle(
+        type: BottomNavigationBarType.fixed,
+        backgroundColor: pretoPrincipal,
+        selectedItemColor: azulPrincipal,
+        unselectedItemColor: Colors.grey.shade400,
+        selectedLabelStyle: const TextStyle(
           fontSize: 9,
-          fontWeight:
-              FontWeight.w700,
-          letterSpacing:
-              0.8,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.8,
         ),
-
-        unselectedLabelStyle:
-            const TextStyle(
+        unselectedLabelStyle: const TextStyle(
           fontSize: 9,
-          fontWeight:
-              FontWeight.w700,
-          letterSpacing:
-              0.8,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.8,
         ),
-
         items: const [
           BottomNavigationBarItem(
-            icon: Icon(
-              Icons
-                  .explore_rounded,
-            ),
-            label:
-                'EXPLORAR',
+            icon: Icon(Icons.home_outlined),
+            activeIcon: Icon(Icons.home_rounded),
+            label: 'INÍCIO',
           ),
-
           BottomNavigationBarItem(
-            icon: Icon(
-              Icons
-                  .directions_rounded,
-            ),
-            label:
-                'ROTAS',
+            icon: Icon(Icons.directions_car_outlined),
+            activeIcon: Icon(Icons.directions_car_rounded),
+            label: 'VEÍCULOS',
           ),
-
           BottomNavigationBarItem(
-            icon: Icon(
-              Icons
-                  .star_border_rounded,
-            ),
-            label:
-                'FAVORITOS',
+            icon: Icon(Icons.history_outlined),
+            activeIcon: Icon(Icons.history_rounded),
+            label: 'HISTÓRICO',
           ),
-
           BottomNavigationBarItem(
-            icon: Icon(
-              Icons
-                  .person_outline_rounded,
-            ),
-            label:
-                'PERFIL',
+            icon: Icon(Icons.person_outline_rounded),
+            activeIcon: Icon(Icons.person_rounded),
+            label: 'PERFIL',
           ),
         ],
       ),
     );
   }
+
 }

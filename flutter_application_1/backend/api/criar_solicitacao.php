@@ -2,6 +2,7 @@
 
 header("Content-Type: application/json; charset=UTF-8");
 
+require_once __DIR__ . "/../cors.php";
 require_once __DIR__ . "/../conexao.php";
 
 if ($_SERVER["REQUEST_METHOD"] !== "POST") {
@@ -31,6 +32,10 @@ if (!is_array($dados)) {
     exit;
 }
 
+// ============================================================
+// DADOS RECEBIDOS
+// ============================================================
+
 $clienteId = intval(
     $dados["cliente_id"] ?? 0
 );
@@ -47,6 +52,15 @@ $formaPagamento = trim(
     $dados["forma_pagamento"] ?? ""
 );
 
+$precisaTroco = intval(
+    $dados["precisa_troco"] ?? 0
+);
+
+$trocoPara = isset($dados["troco_para"])
+    && $dados["troco_para"] !== null
+        ? floatval($dados["troco_para"])
+        : null;
+
 $endereco = trim(
     $dados["endereco"] ?? ""
 );
@@ -61,11 +75,9 @@ $valorEstimado =
     $dados["valor_estimado"] ?? null;
 
 
-/*
-|--------------------------------------------------------------------------
-| VALIDAÇÃO
-|--------------------------------------------------------------------------
-*/
+// ============================================================
+// VALIDAÇÃO
+// ============================================================
 
 if ($clienteId <= 0) {
     http_response_code(400);
@@ -117,6 +129,52 @@ if (
     exit;
 }
 
+// ============================================================
+// VALIDAÇÃO DO TROCO
+// ============================================================
+
+// Se o pagamento não for dinheiro,
+// nunca deve existir troco.
+if ($formaPagamento !== "Dinheiro") {
+    $precisaTroco = 0;
+    $trocoPara = null;
+}
+
+// Normaliza para 0 ou 1.
+$precisaTroco =
+    $precisaTroco === 1
+        ? 1
+        : 0;
+
+// Se escolheu dinheiro, mas NÃO precisa de troco,
+// troco_para deve ficar NULL.
+if (
+    $formaPagamento === "Dinheiro" &&
+    $precisaTroco === 0
+) {
+    $trocoPara = null;
+}
+
+// Se precisa de troco, o valor é obrigatório.
+if (
+    $formaPagamento === "Dinheiro" &&
+    $precisaTroco === 1
+) {
+    if (
+        $trocoPara === null ||
+        $trocoPara <= 0
+    ) {
+        http_response_code(400);
+
+        echo json_encode([
+            "sucesso" => false,
+            "mensagem" => "Informe para quanto precisa de troco."
+        ]);
+
+        exit;
+    }
+}
+
 if ($endereco === "") {
     http_response_code(400);
 
@@ -142,8 +200,16 @@ if (
     exit;
 }
 
-$latitude = floatval($latitude);
-$longitude = floatval($longitude);
+$latitude =
+    floatval($latitude);
+
+$longitude =
+    floatval($longitude);
+
+
+// ============================================================
+// VALOR ESTIMADO
+// ============================================================
 
 if ($valorEstimado === null) {
     if ($tipoReboque === "Guincho Leve") {
@@ -157,11 +223,29 @@ $valorEstimado =
     floatval($valorEstimado);
 
 
-/*
-|--------------------------------------------------------------------------
-| VERIFICA CLIENTE
-|--------------------------------------------------------------------------
-*/
+// ============================================================
+// SE PEDIU TROCO, O VALOR PRECISA SER MAIOR QUE O SERVIÇO
+// ============================================================
+
+if (
+    $formaPagamento === "Dinheiro" &&
+    $precisaTroco === 1 &&
+    $trocoPara <= $valorEstimado
+) {
+    http_response_code(400);
+
+    echo json_encode([
+        "sucesso" => false,
+        "mensagem" => "O valor para troco deve ser maior que o valor estimado do serviço."
+    ]);
+
+    exit;
+}
+
+
+// ============================================================
+// VERIFICA CLIENTE
+// ============================================================
 
 $stmt = $conn->prepare("
     SELECT id
@@ -193,17 +277,17 @@ if ($resultado->num_rows === 0) {
 }
 
 
-/*
-|--------------------------------------------------------------------------
-| VERIFICA SE VEÍCULO PERTENCE AO CLIENTE
-|--------------------------------------------------------------------------
-*/
+// ============================================================
+// VERIFICA SE VEÍCULO PERTENCE AO CLIENTE
+// E SE ESTÁ ATIVO
+// ============================================================
 
 $stmt = $conn->prepare("
     SELECT id
     FROM veiculos
     WHERE id = ?
       AND usuario_id = ?
+      AND ativo = 1
     LIMIT 1
 ");
 
@@ -230,11 +314,9 @@ if ($resultado->num_rows === 0) {
 }
 
 
-/*
-|--------------------------------------------------------------------------
-| CRIA SOLICITAÇÃO
-|--------------------------------------------------------------------------
-*/
+// ============================================================
+// CRIA SOLICITAÇÃO
+// ============================================================
 
 $sql = "
     INSERT INTO solicitacoes (
@@ -243,6 +325,8 @@ $sql = "
         veiculo_id,
         tipo_reboque,
         forma_pagamento,
+        precisa_troco,
+        troco_para,
         endereco,
         latitude,
         longitude,
@@ -252,6 +336,8 @@ $sql = "
     VALUES (
         ?,
         NULL,
+        ?,
+        ?,
         ?,
         ?,
         ?,
@@ -278,11 +364,13 @@ if (!$stmt) {
 }
 
 $stmt->bind_param(
-    "iisssddd",
+    "iissidsddd",
     $clienteId,
     $veiculoId,
     $tipoReboque,
     $formaPagamento,
+    $precisaTroco,
+    $trocoPara,
     $endereco,
     $latitude,
     $longitude,
@@ -304,20 +392,50 @@ if (!$stmt->execute()) {
 $solicitacaoId =
     $conn->insert_id;
 
+
+// ============================================================
+// RESPOSTA
+// ============================================================
+
 echo json_encode([
     "sucesso" => true,
     "mensagem" => "Solicitação criada com sucesso.",
     "id" => $solicitacaoId,
+
     "solicitacao" => [
         "id" => $solicitacaoId,
-        "cliente_id" => $clienteId,
-        "veiculo_id" => $veiculoId,
-        "tipo_reboque" => $tipoReboque,
-        "forma_pagamento" => $formaPagamento,
-        "endereco" => $endereco,
-        "latitude" => $latitude,
-        "longitude" => $longitude,
-        "valor_estimado" => $valorEstimado,
-        "status" => "buscando"
+
+        "cliente_id" =>
+            $clienteId,
+
+        "veiculo_id" =>
+            $veiculoId,
+
+        "tipo_reboque" =>
+            $tipoReboque,
+
+        "forma_pagamento" =>
+            $formaPagamento,
+
+        "precisa_troco" =>
+            $precisaTroco,
+
+        "troco_para" =>
+            $trocoPara,
+
+        "endereco" =>
+            $endereco,
+
+        "latitude" =>
+            $latitude,
+
+        "longitude" =>
+            $longitude,
+
+        "valor_estimado" =>
+            $valorEstimado,
+
+        "status" =>
+            "buscando"
     ]
-]);
+], JSON_UNESCAPED_UNICODE);
