@@ -8,8 +8,7 @@ import 'package:flutter_application_1/models/api_exception.dart';
 class ApiService {
   ApiService._();
 
-  static final ApiService instance =
-      ApiService._();
+  static final ApiService instance = ApiService._();
 
   // ============================================================
   // URL
@@ -38,42 +37,20 @@ class ApiService {
   String? _formaPagamentoPadrao;
   String? _apiToken;
 
-  int? get usuarioId =>
-      _usuarioId;
-
-  String? get nomeUsuario =>
-      _nomeUsuario;
-
-  String? get emailUsuario =>
-      _emailUsuario;
-
-  String? get tipoUsuario =>
-      _tipoUsuario;
-
-  String? get telefoneUsuario =>
-      _telefoneUsuario;
-
-  String? get placaGuincho =>
-      _placaGuincho;
-
-  String? get tipoGuincho =>
-      _tipoGuincho;
+  int? get usuarioId => _usuarioId;
+  String? get nomeUsuario => _nomeUsuario;
+  String? get emailUsuario => _emailUsuario;
+  String? get tipoUsuario => _tipoUsuario;
+  String? get telefoneUsuario => _telefoneUsuario;
+  String? get placaGuincho => _placaGuincho;
+  String? get tipoGuincho => _tipoGuincho;
 
   /// `Pix` ou `Dinheiro`; vem marcada ao solicitar um serviço.
-  String? get formaPagamentoPadrao =>
-      _formaPagamentoPadrao;
-
-  String? get apiToken =>
-      _apiToken;
-
-  bool get estaLogado =>
-      _usuarioId != null;
-
-  bool get ehCliente =>
-      _tipoUsuario == 'cliente';
-
-  bool get ehMotorista =>
-      _tipoUsuario == 'motorista';
+  String? get formaPagamentoPadrao => _formaPagamentoPadrao;
+  String? get apiToken => _apiToken;
+  bool get estaLogado => _usuarioId != null;
+  bool get ehCliente => _tipoUsuario == 'cliente';
+  bool get ehMotorista => _tipoUsuario == 'motorista';
 
   // ============================================================
   // LOGIN
@@ -83,11 +60,8 @@ class ApiService {
     required String email,
     required String senha,
   }) async {
-    final response = await http
-        .post(
-          Uri.parse(
-            '$baseUrl/login.php',
-          ),
+    final response = await http.post(
+          Uri.parse('$baseUrl/login.php',),
           headers: {
             'Content-Type':
                 'application/json',
@@ -119,13 +93,11 @@ class ApiService {
       );
     }
 
-    final usuario =
-        Map<String, dynamic>.from(
+    final usuario = Map<String, dynamic>.from(
       usuarioRaw,
     );
 
-    final id =
-        _paraInt(
+    final id = _paraInt(
       usuario['id'],
     );
 
@@ -134,36 +106,15 @@ class ApiService {
         'Usuário inválido.',
       );
     }
-
     _usuarioId = id;
-
-    _nomeUsuario =
-        usuario['nome']?.toString();
-
-    _emailUsuario =
-        usuario['email']?.toString();
-
-    _tipoUsuario =
-        usuario['tipo']?.toString();
-
-    _telefoneUsuario =
-        usuario['telefone']?.toString();
-
-    _placaGuincho =
-        usuario['placa_guincho']
-            ?.toString();
-
-    _tipoGuincho =
-        usuario['tipo_guincho']
-            ?.toString();
-
-    _formaPagamentoPadrao =
-        usuario['forma_pagamento_padrao']
-            ?.toString();
-
-    _apiToken =
-        usuario['api_token']
-            ?.toString();
+    _nomeUsuario = usuario['nome']?.toString();
+    _emailUsuario = usuario['email']?.toString();
+    _tipoUsuario = usuario['tipo']?.toString();
+    _telefoneUsuario = usuario['telefone']?.toString();
+    _placaGuincho = usuario['placa_guincho']?.toString();
+    _tipoGuincho = usuario['tipo_guincho']?.toString();
+    _formaPagamentoPadrao = usuario['forma_pagamento_padrao']?.toString();
+    _apiToken = usuario['api_token']?.toString();
 
     return usuario;
   }
@@ -174,21 +125,13 @@ class ApiService {
 
   void logout() {
     _usuarioId = null;
-
     _nomeUsuario = null;
-
     _emailUsuario = null;
-
     _tipoUsuario = null;
-
     _telefoneUsuario = null;
-
     _placaGuincho = null;
-
     _tipoGuincho = null;
-
     _formaPagamentoPadrao = null;
-
     _apiToken = null;
   }
 
@@ -264,8 +207,7 @@ class ApiService {
       );
     }
 
-    final response = await http
-        .post(
+    final response = await http.post(
           Uri.parse('$baseUrl/alterar_senha.php'),
           headers: {
             'Content-Type': 'application/json',
@@ -313,9 +255,7 @@ class ApiService {
       );
     }
 
-    final response =
-        await http
-            .post(
+    final response = await http.post(
               Uri.parse(
                 '$baseUrl/adicionar_veiculo.php',
               ),
@@ -326,20 +266,13 @@ class ApiService {
                     'application/json',
               },
               body: jsonEncode({
-                'usuario_id':
-                    id,
-                'tipo':
-                    tipo,
-                'marca':
-                    marca,
-                'modelo':
-                    modelo,
-                'ano':
-                    ano,
-                'placa':
-                    placa,
-                'cor':
-                    cor,
+                'usuario_id': id,
+                'tipo': tipo,
+                'marca': marca,
+                'modelo': modelo,
+                'ano': ano,
+                'placa': placa,
+                'cor': cor,
               }),
             )
             .timeout(
@@ -359,8 +292,7 @@ class ApiService {
 
   Future<List<Map<String, dynamic>>>
       listarVeiculos() async {
-    final id =
-        _usuarioId;
+    final id = _usuarioId;
 
     if (id == null) {
       throw ApiException(
@@ -368,26 +300,20 @@ class ApiService {
       );
     }
 
-    if (_tipoUsuario !=
-        'cliente') {
+    if (_tipoUsuario != 'cliente') {
       throw ApiException(
         'Somente clientes possuem veículos cadastrados.',
       );
     }
 
-    final uri =
-        Uri.parse(
+    final uri = Uri.parse(
       '$baseUrl/listar_veiculos.php'
       '?usuario_id=$id',
     );
 
-    final response =
-        await http
-            .get(
-              uri,
-              headers: const {
-                'Accept':
-                    'application/json',
+    final response = await http.get(
+              uri, headers: const {
+                'Accept':'application/json',
               },
             )
             .timeout(
@@ -396,14 +322,12 @@ class ApiService {
               ),
             );
 
-    final dados =
-        await _decodificarResposta(
+    final dados = await _decodificarResposta(
       response,
     );
 
-    final lista =
-        dados['veiculos'];
-
+    final lista = dados['veiculos'];
+    
     if (lista is! List) {
       return [];
     }
@@ -486,36 +410,17 @@ Future<Map<String, dynamic>>
   // BODY
   // ============================================================
 
-  final body =
-      <String, dynamic>{
-    'cliente_id':
-        clienteId,
-
-    'veiculo_id':
-        veiculoId,
-
-    'tipo_reboque':
-        tipoReboque,
-
-    'forma_pagamento':
-        formaPagamento,
-
-    'precisa_troco':
-        precisaTrocoFinal
-            ? 1
-            : 0,
-
-    'troco_para':
-        trocoParaFinal,
-
-    'endereco':
-        endereco,
-
-    'latitude':
-        latitude,
-
-    'longitude':
-        longitude,
+  final body = <String, dynamic>{
+   
+    'cliente_id': clienteId,
+    'veiculo_id': veiculoId,
+    'tipo_reboque': tipoReboque,
+    'forma_pagamento': formaPagamento,
+    'precisa_troco': precisaTrocoFinal ? 1 : 0,
+    'troco_para': trocoParaFinal,
+    'endereco': endereco,
+    'latitude': latitude,
+    'longitude': longitude,
   };
 
   if (valorEstimado != null) {
@@ -523,18 +428,13 @@ Future<Map<String, dynamic>>
         valorEstimado;
   }
 
-  final response =
-      await http
-          .post(
+  final response = await http.post(
             Uri.parse(
               '$baseUrl/criar_solicitacao.php',
             ),
             headers: {
-              'Content-Type':
-                  'application/json',
-
-              'Accept':
-                  'application/json',
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
             },
             body:
                 jsonEncode(
@@ -598,8 +498,7 @@ Future<Map<String, dynamic>> verificarEmail({
   required String email,
   required String codigo,
 }) async {
-  final response = await http
-      .post(
+  final response = await http.post(
         Uri.parse(
           '$baseUrl/verificar_email.php',
         ),
@@ -621,8 +520,7 @@ Future<Map<String, dynamic>> verificarEmail({
   );
 }
 
-Future<Map<String, dynamic>>
-    reenviarCodigoVerificacao({
+Future<Map<String, dynamic>> reenviarCodigoVerificacao({
   required String email,
 }) async {
   final response = await http
@@ -687,8 +585,7 @@ Future<Map<String, dynamic>>
     required String email,
     required String codigo,
   }) async {
-    final response = await http
-        .post(
+    final response = await http.post(
           Uri.parse(
             '$baseUrl/validar_codigo_recuperacao.php',
           ),
@@ -721,8 +618,7 @@ Future<Map<String, dynamic>>
     required String codigo,
     required String novaSenha,
   }) async {
-    final response = await http
-        .post(
+    final response = await http.post(
           Uri.parse(
             '$baseUrl/redefinir_senha.php',
           ),
@@ -751,8 +647,7 @@ Future<Map<String, dynamic>>
   // CONSULTAR SOLICITAÇÃO
   // ============================================================
 
-  Future<Map<String, dynamic>>
-      consultarSolicitacao(
+  Future<Map<String, dynamic>> consultarSolicitacao(
     int solicitacaoId,
   ) async {
     final uri =
@@ -761,9 +656,7 @@ Future<Map<String, dynamic>>
       '?solicitacao_id=$solicitacaoId',
     );
 
-    final response =
-        await http
-            .get(
+    final response = await http.get(
               uri,
               headers: const {
                 'Accept':
@@ -785,8 +678,7 @@ Future<Map<String, dynamic>>
   // CANCELAR
   // ============================================================
 
-  Future<Map<String, dynamic>>
-      cancelarSolicitacao(
+  Future<Map<String, dynamic>> cancelarSolicitacao(
     int solicitacaoId,
   ) async {
     final response =
@@ -825,8 +717,7 @@ Future<Map<String, dynamic>>
   // BUSCAR SOLICITAÇÕES - MOTORISTA
   // ============================================================
 
-  Future<List<Map<String, dynamic>>>
-      buscarSolicitacoes({
+  Future<List<Map<String, dynamic>>> buscarSolicitacoes({
     int? motoristaId,
   }) async {
     final id =
@@ -845,9 +736,7 @@ Future<Map<String, dynamic>>
       '?motorista_id=$id',
     );
 
-    final response =
-        await http
-            .get(
+    final response = await http.get(
               uri,
               headers: const {
                 'Accept':
@@ -860,13 +749,11 @@ Future<Map<String, dynamic>>
               ),
             );
 
-    final dados =
-        await _decodificarResposta(
+    final dados = await _decodificarResposta(
       response,
     );
 
-    final lista =
-        dados['solicitacoes'];
+    final lista = dados['solicitacoes'];
 
     if (lista is! List) {
       return [];
@@ -886,14 +773,11 @@ Future<Map<String, dynamic>>
   // ACEITAR SOLICITAÇÃO
   // ============================================================
 
-  Future<Map<String, dynamic>>
-      aceitarSolicitacao({
+  Future<Map<String, dynamic>> aceitarSolicitacao({
     required int solicitacaoId,
     int? motoristaId,
   }) async {
-    final id =
-        motoristaId ??
-            _usuarioId;
+    final id = motoristaId ?? _usuarioId;
 
     if (id == null) {
       throw ApiException(
@@ -901,9 +785,7 @@ Future<Map<String, dynamic>>
       );
     }
 
-    final response =
-        await http
-            .post(
+    final response = await http.post(
               Uri.parse(
                 '$baseUrl/aceitar_solicitacao.php',
               ),
@@ -936,15 +818,13 @@ Future<Map<String, dynamic>>
   // ATUALIZAR STATUS
   // ============================================================
 
-  Future<Map<String, dynamic>>
-      atualizarStatus({
+  Future<Map<String, dynamic>> atualizarStatus({
     required int solicitacaoId,
     required String status,
     int? motoristaId,
   }) async {
     final id =
-        motoristaId ??
-            _usuarioId;
+        motoristaId ?? _usuarioId;
 
     if (id == null) {
       throw ApiException(
@@ -952,9 +832,7 @@ Future<Map<String, dynamic>>
       );
     }
 
-    final response =
-        await http
-            .post(
+    final response = await http.post(
               Uri.parse(
                 '$baseUrl/atualizar_status.php',
               ),
@@ -989,15 +867,12 @@ Future<Map<String, dynamic>>
   // LOCALIZAÇÃO
   // ============================================================
 
-  Future<Map<String, dynamic>>
-      atualizarLocalizacao({
+  Future<Map<String, dynamic>> atualizarLocalizacao({
     required double latitude,
     required double longitude,
     int? motoristaId,
   }) async {
-    final id =
-        motoristaId ??
-            _usuarioId;
+    final id = motoristaId ?? _usuarioId;
 
     if (id == null) {
       throw ApiException(
@@ -1005,32 +880,21 @@ Future<Map<String, dynamic>>
       );
     }
 
-    final response =
-        await http
-            .post(
+    final response = await http.post(
               Uri.parse(
                 '$baseUrl/atualizar_localizacao.php',
               ),
               headers: {
-                'Content-Type':
-                    'application/json',
-                'Accept':
-                    'application/json',
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
               },
-              body:
-                  jsonEncode({
-                'motorista_id':
-                    id,
-                'latitude':
-                    latitude,
-                'longitude':
-                    longitude,
+              body: jsonEncode({
+                'motorista_id': id,
+                'latitude': latitude,
+                'longitude': longitude,
               }),
             )
-            .timeout(
-              const Duration(
-                seconds: 5,
-              ),
+            .timeout( const Duration( seconds: 5,),
             );
 
     return _decodificarResposta(
@@ -1042,14 +906,11 @@ Future<Map<String, dynamic>>
   // DISPONIBILIDADE
   // ============================================================
 
-  Future<Map<String, dynamic>>
-      atualizarDisponibilidade({
+  Future<Map<String, dynamic>> atualizarDisponibilidade({
     required bool disponivel,
     int? motoristaId,
   }) async {
-    final id =
-        motoristaId ??
-            _usuarioId;
+    final id = motoristaId ?? _usuarioId;
 
     if (id == null) {
       throw ApiException(
@@ -1057,26 +918,17 @@ Future<Map<String, dynamic>>
       );
     }
 
-    final response =
-        await http
-            .post(
+    final response = await http.post(
               Uri.parse(
                 '$baseUrl/atualizar_disponibilidade.php',
               ),
               headers: {
-                'Content-Type':
-                    'application/json',
-                'Accept':
-                    'application/json',
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
               },
-              body:
-                  jsonEncode({
-                'motorista_id':
-                    id,
-                'disponivel':
-                    disponivel
-                        ? 1
-                        : 0,
+              body: jsonEncode({
+                'motorista_id': id,
+                'disponivel': disponivel ? 1 : 0,
               }),
             )
             .timeout(
@@ -1118,8 +970,7 @@ Future<Map<String, dynamic>>
       );
     }
 
-    final response = await http
-        .post(
+    final response = await http.post(
           Uri.parse('$baseUrl/editar_veiculo.php'),
           headers: {
             'Content-Type': 'application/json',
@@ -1202,8 +1053,7 @@ Future<Map<String, dynamic>>
       );
     }
 
-    final response = await http
-        .get(
+    final response = await http.get(
           Uri.parse(
             '$baseUrl/listar_historico.php?cliente_id=$id',
           ),
@@ -1252,8 +1102,7 @@ Future<Map<String, dynamic>> excluirVeiculo(
     );
   }
 
-  final response = await http
-      .post(
+  final response = await http.post(
         Uri.parse(
           '$baseUrl/excluir_veiculo.php',
         ),
@@ -1328,8 +1177,7 @@ Future<Map<String, dynamic>> excluirVeiculo(
       );
     }
 
-    final response = await http
-        .post(
+    final response = await http.post(
           Uri.parse('$baseUrl/excluir_conta.php'),
           headers: {
             'Content-Type': 'application/json',
@@ -1364,8 +1212,7 @@ Future<Map<String, dynamic>> excluirVeiculo(
       );
     }
 
-    final response = await http
-        .get(
+    final response = await http.get(
           Uri.parse('$baseUrl/listar_enderecos.php?usuario_id=$id'),
           headers: const {
             'Accept': 'application/json',
@@ -1382,11 +1229,7 @@ Future<Map<String, dynamic>> excluirVeiculo(
       return [];
     }
 
-    return lista
-        .map(
-          (item) => Map<String, dynamic>.from(item as Map),
-        )
-        .toList();
+    return lista.map((item) => Map<String, dynamic>.from(item as Map),).toList();
   }
 
   Future<Map<String, dynamic>> adicionarEndereco({
@@ -1403,8 +1246,7 @@ Future<Map<String, dynamic>> excluirVeiculo(
       );
     }
 
-    final response = await http
-        .post(
+    final response = await http.post(
           Uri.parse('$baseUrl/adicionar_endereco.php'),
           headers: {
             'Content-Type': 'application/json',
@@ -1487,12 +1329,10 @@ Future<Map<String, dynamic>> excluirVeiculo(
   // RESPOSTA
   // ============================================================
 
-  Future<Map<String, dynamic>>
-      _decodificarResposta(
+  Future<Map<String, dynamic>> _decodificarResposta(
     http.Response response,
   ) async {
-    Map<String, dynamic>
-        dados;
+    Map<String, dynamic> dados;
 
     try {
       final decoded =
@@ -1503,9 +1343,7 @@ Future<Map<String, dynamic>> excluirVeiculo(
       if (decoded is! Map) {
         throw const FormatException();
       }
-
-      dados =
-          Map<String, dynamic>.from(
+      dados = Map<String, dynamic>.from(
         decoded,
       );
     } catch (_) {
@@ -1519,22 +1357,15 @@ Future<Map<String, dynamic>> excluirVeiculo(
     if (response.statusCode < 200 ||
         response.statusCode >= 300) {
       throw ApiException(
-        dados['mensagem']
-                ?.toString() ??
-            'Erro do servidor.',
-        statusCode:
-            response.statusCode,
+        dados['mensagem']?.toString()??'Erro do servidor.',
+        statusCode: response.statusCode,
       );
     }
 
-    if (dados['sucesso'] ==
-        false) {
+    if (dados['sucesso'] == false) {
       throw ApiException(
-        dados['mensagem']
-                ?.toString() ??
-            'Não foi possível realizar a operação.',
-        statusCode:
-            response.statusCode,
+        dados['mensagem']?.toString()??'Não foi possível realizar a operação.',
+        statusCode: response.statusCode,
       );
     }
 
@@ -1556,4 +1387,4 @@ Future<Map<String, dynamic>> excluirVeiculo(
       valor.toString(),
     );
   }
-}
+}
