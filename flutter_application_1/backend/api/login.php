@@ -65,6 +65,8 @@ $stmt = $conn->prepare("
         tipo,
         telefone,
         placa_guincho,
+        tipo_guincho,
+        forma_pagamento_padrao,
         disponivel,
         api_token
     FROM usuarios
@@ -134,6 +136,8 @@ echo json_encode([
         "tipo" => $usuario["tipo"],
         "telefone" => $usuario["telefone"],
         "placa_guincho" => $usuario["placa_guincho"],
+        "tipo_guincho" => $usuario["tipo_guincho"],
+        "forma_pagamento_padrao" => $usuario["forma_pagamento_padrao"],
         "disponivel" => intval($usuario["disponivel"]),
         "api_token" => $usuario["api_token"]
     ]
