@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'api_service.dart';
+import 'package:flutter_application_1/controllers/auth_controller.dart';
+import 'package:flutter_application_1/models/api_exception.dart';
+
 
 class EsqueciSenhaScreen extends StatefulWidget {
   const EsqueciSenhaScreen({
@@ -84,8 +86,7 @@ class _EsqueciSenhaScreenState
 
     try {
       final resposta =
-          await ApiService.instance
-              .solicitarRecuperacaoSenha(
+          await AuthController.instance.solicitarRecuperacaoSenha(
         email: email,
       );
 
@@ -148,8 +149,7 @@ class _EsqueciSenhaScreenState
        * Não usa o endpoint de verificação de cadastro.
        */
       final resposta =
-          await ApiService.instance
-              .solicitarRecuperacaoSenha(
+          await AuthController.instance.solicitarRecuperacaoSenha(
         email: _email,
       );
 
@@ -212,8 +212,7 @@ class _EsqueciSenhaScreenState
     });
 
     try {
-      await ApiService.instance
-          .validarCodigoRecuperacao(
+      await AuthController.instance.validarCodigoRecuperacao(
         email: _email,
         codigo: codigo,
       );
@@ -281,8 +280,7 @@ class _EsqueciSenhaScreenState
 
     try {
       final resposta =
-          await ApiService.instance
-              .redefinirSenha(
+          await AuthController.instance.redefinirSenha(
         email: _email,
         codigo: _codigoValidado,
         novaSenha: senha,

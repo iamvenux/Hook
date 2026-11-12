@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'api_service.dart';
-import 'confirmar_email_screen.dart';
+import 'package:flutter_application_1/controllers/auth_controller.dart';
+import 'package:flutter_application_1/models/api_exception.dart';
+import 'package:flutter_application_1/screens/auth/confirmar_email_screen.dart';
+import 'package:flutter_application_1/widgets/telefone_input_formatter.dart';
+
 
 class CriarContaScreen extends StatefulWidget {
   const CriarContaScreen({
@@ -99,7 +102,7 @@ class _CriarContaScreenState
     });
 
     try {
-      await ApiService.instance.criarConta(
+      await AuthController.instance.criarConta(
         nome: nome,
         email: email,
         telefone: telefone,
@@ -997,73 +1000,3 @@ class _CriarContaScreenState
     );
   }
 }
-
-// ============================================================
-// MÁSCARA DE TELEFONE
-// (00) 00000-0000
-// ============================================================
-
-class TelefoneInputFormatter
-    extends TextInputFormatter {
-  @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) {
-    var numeros =
-        newValue.text.replaceAll(
-      RegExp(r'\D'),
-      '',
-    );
-
-    if (numeros.length > 11) {
-      numeros =
-          numeros.substring(
-        0,
-        11,
-      );
-    }
-
-    String texto = '';
-
-    if (numeros.isNotEmpty) {
-      final fimDdd =
-          numeros.length < 2
-              ? numeros.length
-              : 2;
-
-      texto =
-          '(${numeros.substring(0, fimDdd)}';
-    }
-
-    if (numeros.length >= 2) {
-      texto += ') ';
-    }
-
-    if (numeros.length > 2) {
-      final fimNumero =
-          numeros.length < 7
-              ? numeros.length
-              : 7;
-
-      texto += numeros.substring(
-        2,
-        fimNumero,
-      );
-    }
-
-    if (numeros.length > 7) {
-      texto +=
-          '-${numeros.substring(7)}';
-    }
-
-    return TextEditingValue(
-      text: texto,
-      selection:
-          TextSelection.collapsed(
-        offset: texto.length,
-      ),
-    );
-  }
-}
-

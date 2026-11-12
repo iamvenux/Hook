@@ -1,0 +1,1559 @@
+import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
+
+import 'package:flutter_application_1/models/api_exception.dart';
+
+class ApiService {
+  ApiService._();
+
+  static final ApiService instance =
+      ApiService._();
+
+  // ============================================================
+  // URL
+  // ============================================================
+
+  static String get baseUrl {
+    if (kIsWeb) {
+      return 'http://localhost/flutter_application_1/backend/api';
+    }
+
+    return 'http://10.0.2.2/flutter_application_1/backend/api';
+  }
+
+  // ============================================================
+  // USUÁRIO LOGADO
+  // ============================================================
+
+  int? _usuarioId;
+
+  String? _nomeUsuario;
+  String? _emailUsuario;
+  String? _tipoUsuario;
+  String? _telefoneUsuario;
+  String? _placaGuincho;
+  String? _tipoGuincho;
+  String? _formaPagamentoPadrao;
+  String? _apiToken;
+
+  int? get usuarioId =>
+      _usuarioId;
+
+  String? get nomeUsuario =>
+      _nomeUsuario;
+
+  String? get emailUsuario =>
+      _emailUsuario;
+
+  String? get tipoUsuario =>
+      _tipoUsuario;
+
+  String? get telefoneUsuario =>
+      _telefoneUsuario;
+
+  String? get placaGuincho =>
+      _placaGuincho;
+
+  String? get tipoGuincho =>
+      _tipoGuincho;
+
+  /// `Pix` ou `Dinheiro`; vem marcada ao solicitar um serviço.
+  String? get formaPagamentoPadrao =>
+      _formaPagamentoPadrao;
+
+  String? get apiToken =>
+      _apiToken;
+
+  bool get estaLogado =>
+      _usuarioId != null;
+
+  bool get ehCliente =>
+      _tipoUsuario == 'cliente';
+
+  bool get ehMotorista =>
+      _tipoUsuario == 'motorista';
+
+  // ============================================================
+  // LOGIN
+  // ============================================================
+
+  Future<Map<String, dynamic>> login({
+    required String email,
+    required String senha,
+  }) async {
+    final response = await http
+        .post(
+          Uri.parse(
+            '$baseUrl/login.php',
+          ),
+          headers: {
+            'Content-Type':
+                'application/json',
+            'Accept':
+                'application/json',
+          },
+          body: jsonEncode({
+            'email': email,
+            'senha': senha,
+          }),
+        )
+        .timeout(
+          const Duration(
+            seconds: 10,
+          ),
+        );
+
+    final dados =
+        await _decodificarResposta(
+      response,
+    );
+
+    final usuarioRaw =
+        dados['usuario'];
+
+    if (usuarioRaw is! Map) {
+      throw ApiException(
+        'O servidor não retornou os dados do usuário.',
+      );
+    }
+
+    final usuario =
+        Map<String, dynamic>.from(
+      usuarioRaw,
+    );
+
+    final id =
+        _paraInt(
+      usuario['id'],
+    );
+
+    if (id == null) {
+      throw ApiException(
+        'Usuário inválido.',
+      );
+    }
+
+    _usuarioId = id;
+
+    _nomeUsuario =
+        usuario['nome']?.toString();
+
+    _emailUsuario =
+        usuario['email']?.toString();
+
+    _tipoUsuario =
+        usuario['tipo']?.toString();
+
+    _telefoneUsuario =
+        usuario['telefone']?.toString();
+
+    _placaGuincho =
+        usuario['placa_guincho']
+            ?.toString();
+
+    _tipoGuincho =
+        usuario['tipo_guincho']
+            ?.toString();
+
+    _formaPagamentoPadrao =
+        usuario['forma_pagamento_padrao']
+            ?.toString();
+
+    _apiToken =
+        usuario['api_token']
+            ?.toString();
+
+    return usuario;
+  }
+
+  // ============================================================
+  // LOGOUT
+  // ============================================================
+
+  void logout() {
+    _usuarioId = null;
+
+    _nomeUsuario = null;
+
+    _emailUsuario = null;
+
+    _tipoUsuario = null;
+
+    _telefoneUsuario = null;
+
+    _placaGuincho = null;
+
+    _tipoGuincho = null;
+
+    _formaPagamentoPadrao = null;
+
+    _apiToken = null;
+  }
+
+  // ============================================================
+  // ATUALIZAR PERFIL
+  // ============================================================
+
+  /// Atualiza nome e telefone do usuário logado. Para motorista,
+  /// atualiza também placa e tipo do guincho.
+  Future<Map<String, dynamic>> atualizarPerfil({
+    required String nome,
+    required String telefone,
+    String? placaGuincho,
+    String? tipoGuincho,
+  }) async {
+    final id = _usuarioId;
+
+    if (id == null) {
+      throw ApiException(
+        'Usuário não identificado. Faça login novamente.',
+      );
+    }
+
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/atualizar_perfil.php'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: jsonEncode({
+            'usuario_id': id,
+            'nome': nome,
+            'telefone': telefone,
+            'placa_guincho': placaGuincho,
+            'tipo_guincho': tipoGuincho,
+          }),
+        )
+        .timeout(
+          const Duration(seconds: 10),
+        );
+
+    final dados = await _decodificarResposta(response);
+
+    // Guarda os dados já salvos no servidor.
+    final usuarioRaw = dados['usuario'];
+
+    if (usuarioRaw is Map) {
+      final usuario = Map<String, dynamic>.from(usuarioRaw);
+
+      _nomeUsuario = usuario['nome']?.toString() ?? _nomeUsuario;
+      _telefoneUsuario = usuario['telefone']?.toString();
+      _placaGuincho = usuario['placa_guincho']?.toString();
+      _tipoGuincho = usuario['tipo_guincho']?.toString();
+    }
+
+    return dados;
+  }
+
+  // ============================================================
+  // ALTERAR SENHA
+  // ============================================================
+
+  Future<Map<String, dynamic>> alterarSenha({
+    required String senhaAtual,
+    required String novaSenha,
+  }) async {
+    final id = _usuarioId;
+
+    if (id == null) {
+      throw ApiException(
+        'Usuário não identificado. Faça login novamente.',
+      );
+    }
+
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/alterar_senha.php'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: jsonEncode({
+            'usuario_id': id,
+            'senha_atual': senhaAtual,
+            'nova_senha': novaSenha,
+          }),
+        )
+        .timeout(
+          const Duration(seconds: 10),
+        );
+
+    return _decodificarResposta(response);
+  }
+
+  // ============================================================
+  // ADICIONAR VEÍCULO
+  // ============================================================
+
+  Future<Map<String, dynamic>>
+      adicionarVeiculo({
+    required String tipo,
+    required String marca,
+    required String modelo,
+    required int ano,
+    required String placa,
+    required String cor,
+  }) async {
+    final id =
+        _usuarioId;
+
+    if (id == null) {
+      throw ApiException(
+        'Usuário não identificado. Faça login novamente.',
+      );
+    }
+
+    if (_tipoUsuario !=
+        'cliente') {
+      throw ApiException(
+        'Somente clientes podem cadastrar veículos.',
+      );
+    }
+
+    final response =
+        await http
+            .post(
+              Uri.parse(
+                '$baseUrl/adicionar_veiculo.php',
+              ),
+              headers: {
+                'Content-Type':
+                    'application/json',
+                'Accept':
+                    'application/json',
+              },
+              body: jsonEncode({
+                'usuario_id':
+                    id,
+                'tipo':
+                    tipo,
+                'marca':
+                    marca,
+                'modelo':
+                    modelo,
+                'ano':
+                    ano,
+                'placa':
+                    placa,
+                'cor':
+                    cor,
+              }),
+            )
+            .timeout(
+              const Duration(
+                seconds: 10,
+              ),
+            );
+
+    return _decodificarResposta(
+      response,
+    );
+  }
+
+  // ============================================================
+  // LISTAR VEÍCULOS
+  // ============================================================
+
+  Future<List<Map<String, dynamic>>>
+      listarVeiculos() async {
+    final id =
+        _usuarioId;
+
+    if (id == null) {
+      throw ApiException(
+        'Usuário não identificado. Faça login novamente.',
+      );
+    }
+
+    if (_tipoUsuario !=
+        'cliente') {
+      throw ApiException(
+        'Somente clientes possuem veículos cadastrados.',
+      );
+    }
+
+    final uri =
+        Uri.parse(
+      '$baseUrl/listar_veiculos.php'
+      '?usuario_id=$id',
+    );
+
+    final response =
+        await http
+            .get(
+              uri,
+              headers: const {
+                'Accept':
+                    'application/json',
+              },
+            )
+            .timeout(
+              const Duration(
+                seconds: 5,
+              ),
+            );
+
+    final dados =
+        await _decodificarResposta(
+      response,
+    );
+
+    final lista =
+        dados['veiculos'];
+
+    if (lista is! List) {
+      return [];
+    }
+
+    return lista
+        .map(
+          (item) =>
+              Map<String, dynamic>.from(
+            item as Map,
+          ),
+        )
+        .toList();
+  }
+
+// ============================================================
+// CRIAR SOLICITAÇÃO
+// ============================================================
+
+Future<Map<String, dynamic>>
+    criarSolicitacao({
+  required int veiculoId,
+  required String tipoReboque,
+  required String formaPagamento,
+  required String endereco,
+  required double latitude,
+  required double longitude,
+  double? valorEstimado,
+
+  // NOVOS
+  bool precisaTroco = false,
+  double? trocoPara,
+}) async {
+  final clienteId =
+      _usuarioId;
+
+  if (clienteId == null) {
+    throw ApiException(
+      'Cliente não identificado.',
+    );
+  }
+
+  if (_tipoUsuario != 'cliente') {
+    throw ApiException(
+      'Somente clientes podem criar solicitações.',
+    );
+  }
+
+  // ============================================================
+  // NORMALIZA TROCO
+  // ============================================================
+
+  bool precisaTrocoFinal =
+      precisaTroco;
+
+  double? trocoParaFinal =
+      trocoPara;
+
+  if (formaPagamento != 'Dinheiro') {
+    precisaTrocoFinal = false;
+    trocoParaFinal = null;
+  }
+
+  if (
+      formaPagamento == 'Dinheiro' &&
+      !precisaTrocoFinal) {
+    trocoParaFinal = null;
+  }
+
+  if (
+      formaPagamento == 'Dinheiro' &&
+      precisaTrocoFinal &&
+      (trocoParaFinal == null ||
+          trocoParaFinal <= 0)) {
+    throw ApiException(
+      'Informe para quanto precisa de troco.',
+    );
+  }
+
+  // ============================================================
+  // BODY
+  // ============================================================
+
+  final body =
+      <String, dynamic>{
+    'cliente_id':
+        clienteId,
+
+    'veiculo_id':
+        veiculoId,
+
+    'tipo_reboque':
+        tipoReboque,
+
+    'forma_pagamento':
+        formaPagamento,
+
+    'precisa_troco':
+        precisaTrocoFinal
+            ? 1
+            : 0,
+
+    'troco_para':
+        trocoParaFinal,
+
+    'endereco':
+        endereco,
+
+    'latitude':
+        latitude,
+
+    'longitude':
+        longitude,
+  };
+
+  if (valorEstimado != null) {
+    body['valor_estimado'] =
+        valorEstimado;
+  }
+
+  final response =
+      await http
+          .post(
+            Uri.parse(
+              '$baseUrl/criar_solicitacao.php',
+            ),
+            headers: {
+              'Content-Type':
+                  'application/json',
+
+              'Accept':
+                  'application/json',
+            },
+            body:
+                jsonEncode(
+              body,
+            ),
+          )
+          .timeout(
+            const Duration(
+              seconds: 10,
+            ),
+          );
+
+  return _decodificarResposta(
+    response,
+  );
+}
+
+// ============================================================
+// CADASTRO / VERIFICAÇÃO DE E-MAIL
+// Cole estes métodos DENTRO da classe ApiService.
+// ============================================================
+
+Future<Map<String, dynamic>> criarConta({
+  required String nome,
+  required String email,
+  required String telefone,
+  required String senha,
+  required String tipo,
+  String? placaGuincho,
+  String? tipoGuincho,
+}) async {
+  final response = await http
+      .post(
+        Uri.parse(
+          '$baseUrl/criar_conta.php',
+        ),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({
+          'nome': nome,
+          'email': email,
+          'telefone': telefone,
+          'senha': senha,
+          'tipo': tipo,
+          'placa_guincho': placaGuincho,
+          'tipo_guincho': tipoGuincho,
+        }),
+      )
+      .timeout(
+        const Duration(seconds: 15),
+      );
+
+  return _decodificarResposta(
+    response,
+  );
+}
+
+Future<Map<String, dynamic>> verificarEmail({
+  required String email,
+  required String codigo,
+}) async {
+  final response = await http
+      .post(
+        Uri.parse(
+          '$baseUrl/verificar_email.php',
+        ),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({
+          'email': email,
+          'codigo': codigo,
+        }),
+      )
+      .timeout(
+        const Duration(seconds: 10),
+      );
+
+  return _decodificarResposta(
+    response,
+  );
+}
+
+Future<Map<String, dynamic>>
+    reenviarCodigoVerificacao({
+  required String email,
+}) async {
+  final response = await http
+      .post(
+        Uri.parse(
+          '$baseUrl/reenviar_codigo_verificacao.php',
+        ),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({
+          'email': email,
+        }),
+      )
+      .timeout(
+        const Duration(seconds: 15),
+      );
+
+  return _decodificarResposta(
+    response,
+  );
+}
+
+
+  // ============================================================
+  // SOLICITAR RECUPERAÇÃO DE SENHA
+  // ============================================================
+
+  Future<Map<String, dynamic>> solicitarRecuperacaoSenha({
+    required String email,
+  }) async {
+    final response = await http
+        .post(
+          Uri.parse(
+            '$baseUrl/solicitar_recuperacao_senha.php',
+          ),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: jsonEncode({
+            'email': email,
+          }),
+        )
+        .timeout(
+          const Duration(
+            seconds: 15,
+          ),
+        );
+
+    return _decodificarResposta(
+      response,
+    );
+  }
+
+  // ============================================================
+  // VALIDAR CÓDIGO DE RECUPERAÇÃO
+  // ============================================================
+
+  Future<Map<String, dynamic>> validarCodigoRecuperacao({
+    required String email,
+    required String codigo,
+  }) async {
+    final response = await http
+        .post(
+          Uri.parse(
+            '$baseUrl/validar_codigo_recuperacao.php',
+          ),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: jsonEncode({
+            'email': email,
+            'codigo': codigo,
+          }),
+        )
+        .timeout(
+          const Duration(
+            seconds: 10,
+          ),
+        );
+
+    return _decodificarResposta(
+      response,
+    );
+  }
+
+  // ============================================================
+  // REDEFINIR SENHA
+  // ============================================================
+
+  Future<Map<String, dynamic>> redefinirSenha({
+    required String email,
+    required String codigo,
+    required String novaSenha,
+  }) async {
+    final response = await http
+        .post(
+          Uri.parse(
+            '$baseUrl/redefinir_senha.php',
+          ),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: jsonEncode({
+            'email': email,
+            'codigo': codigo,
+            'nova_senha': novaSenha,
+          }),
+        )
+        .timeout(
+          const Duration(
+            seconds: 10,
+          ),
+        );
+
+    return _decodificarResposta(
+      response,
+    );
+  }
+
+  // ============================================================
+  // CONSULTAR SOLICITAÇÃO
+  // ============================================================
+
+  Future<Map<String, dynamic>>
+      consultarSolicitacao(
+    int solicitacaoId,
+  ) async {
+    final uri =
+        Uri.parse(
+      '$baseUrl/consultar_solicitacao.php'
+      '?solicitacao_id=$solicitacaoId',
+    );
+
+    final response =
+        await http
+            .get(
+              uri,
+              headers: const {
+                'Accept':
+                    'application/json',
+              },
+            )
+            .timeout(
+              const Duration(
+                seconds: 5,
+              ),
+            );
+
+    return _decodificarResposta(
+      response,
+    );
+  }
+
+  // ============================================================
+  // CANCELAR
+  // ============================================================
+
+  Future<Map<String, dynamic>>
+      cancelarSolicitacao(
+    int solicitacaoId,
+  ) async {
+    final response =
+        await http
+            .post(
+              Uri.parse(
+                '$baseUrl/cancelar_solicitacao.php',
+              ),
+              headers: {
+                'Content-Type':
+                    'application/json',
+                'Accept':
+                    'application/json',
+              },
+              body:
+                  jsonEncode({
+                'solicitacao_id':
+                    solicitacaoId,
+                if (_usuarioId != null)
+                  'cliente_id':
+                      _usuarioId,
+              }),
+            )
+            .timeout(
+              const Duration(
+                seconds: 10,
+              ),
+            );
+
+    return _decodificarResposta(
+      response,
+    );
+  }
+
+  // ============================================================
+  // BUSCAR SOLICITAÇÕES - MOTORISTA
+  // ============================================================
+
+  Future<List<Map<String, dynamic>>>
+      buscarSolicitacoes({
+    int? motoristaId,
+  }) async {
+    final id =
+        motoristaId ??
+            _usuarioId;
+
+    if (id == null) {
+      throw ApiException(
+        'Motorista não identificado.',
+      );
+    }
+
+    final uri =
+        Uri.parse(
+      '$baseUrl/buscar_solicitacoes.php'
+      '?motorista_id=$id',
+    );
+
+    final response =
+        await http
+            .get(
+              uri,
+              headers: const {
+                'Accept':
+                    'application/json',
+              },
+            )
+            .timeout(
+              const Duration(
+                seconds: 5,
+              ),
+            );
+
+    final dados =
+        await _decodificarResposta(
+      response,
+    );
+
+    final lista =
+        dados['solicitacoes'];
+
+    if (lista is! List) {
+      return [];
+    }
+
+    return lista
+        .map(
+          (item) =>
+              Map<String, dynamic>.from(
+            item as Map,
+          ),
+        )
+        .toList();
+  }
+
+  // ============================================================
+  // ACEITAR SOLICITAÇÃO
+  // ============================================================
+
+  Future<Map<String, dynamic>>
+      aceitarSolicitacao({
+    required int solicitacaoId,
+    int? motoristaId,
+  }) async {
+    final id =
+        motoristaId ??
+            _usuarioId;
+
+    if (id == null) {
+      throw ApiException(
+        'Motorista não identificado.',
+      );
+    }
+
+    final response =
+        await http
+            .post(
+              Uri.parse(
+                '$baseUrl/aceitar_solicitacao.php',
+              ),
+              headers: {
+                'Content-Type':
+                    'application/json',
+                'Accept':
+                    'application/json',
+              },
+              body:
+                  jsonEncode({
+                'solicitacao_id':
+                    solicitacaoId,
+                'motorista_id':
+                    id,
+              }),
+            )
+            .timeout(
+              const Duration(
+                seconds: 10,
+              ),
+            );
+
+    return _decodificarResposta(
+      response,
+    );
+  }
+
+  // ============================================================
+  // ATUALIZAR STATUS
+  // ============================================================
+
+  Future<Map<String, dynamic>>
+      atualizarStatus({
+    required int solicitacaoId,
+    required String status,
+    int? motoristaId,
+  }) async {
+    final id =
+        motoristaId ??
+            _usuarioId;
+
+    if (id == null) {
+      throw ApiException(
+        'Motorista não identificado.',
+      );
+    }
+
+    final response =
+        await http
+            .post(
+              Uri.parse(
+                '$baseUrl/atualizar_status.php',
+              ),
+              headers: {
+                'Content-Type':
+                    'application/json',
+                'Accept':
+                    'application/json',
+              },
+              body:
+                  jsonEncode({
+                'solicitacao_id':
+                    solicitacaoId,
+                'motorista_id':
+                    id,
+                'status':
+                    status,
+              }),
+            )
+            .timeout(
+              const Duration(
+                seconds: 10,
+              ),
+            );
+
+    return _decodificarResposta(
+      response,
+    );
+  }
+
+  // ============================================================
+  // LOCALIZAÇÃO
+  // ============================================================
+
+  Future<Map<String, dynamic>>
+      atualizarLocalizacao({
+    required double latitude,
+    required double longitude,
+    int? motoristaId,
+  }) async {
+    final id =
+        motoristaId ??
+            _usuarioId;
+
+    if (id == null) {
+      throw ApiException(
+        'Motorista não identificado.',
+      );
+    }
+
+    final response =
+        await http
+            .post(
+              Uri.parse(
+                '$baseUrl/atualizar_localizacao.php',
+              ),
+              headers: {
+                'Content-Type':
+                    'application/json',
+                'Accept':
+                    'application/json',
+              },
+              body:
+                  jsonEncode({
+                'motorista_id':
+                    id,
+                'latitude':
+                    latitude,
+                'longitude':
+                    longitude,
+              }),
+            )
+            .timeout(
+              const Duration(
+                seconds: 5,
+              ),
+            );
+
+    return _decodificarResposta(
+      response,
+    );
+  }
+
+  // ============================================================
+  // DISPONIBILIDADE
+  // ============================================================
+
+  Future<Map<String, dynamic>>
+      atualizarDisponibilidade({
+    required bool disponivel,
+    int? motoristaId,
+  }) async {
+    final id =
+        motoristaId ??
+            _usuarioId;
+
+    if (id == null) {
+      throw ApiException(
+        'Motorista não identificado.',
+      );
+    }
+
+    final response =
+        await http
+            .post(
+              Uri.parse(
+                '$baseUrl/atualizar_disponibilidade.php',
+              ),
+              headers: {
+                'Content-Type':
+                    'application/json',
+                'Accept':
+                    'application/json',
+              },
+              body:
+                  jsonEncode({
+                'motorista_id':
+                    id,
+                'disponivel':
+                    disponivel
+                        ? 1
+                        : 0,
+              }),
+            )
+            .timeout(
+              const Duration(
+                seconds: 5,
+              ),
+            );
+
+    return _decodificarResposta(
+      response,
+    );
+  }
+
+
+  // ============================================================
+  // EDITAR VEÍCULO
+  // ============================================================
+
+  Future<Map<String, dynamic>> editarVeiculo({
+    required int veiculoId,
+    required String tipo,
+    required String marca,
+    required String modelo,
+    required int ano,
+    required String placa,
+    required String cor,
+  }) async {
+    final id = _usuarioId;
+
+    if (id == null) {
+      throw ApiException(
+        'Usuário não identificado. Faça login novamente.',
+      );
+    }
+
+    if (_tipoUsuario != 'cliente') {
+      throw ApiException(
+        'Somente clientes podem editar veículos.',
+      );
+    }
+
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/editar_veiculo.php'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: jsonEncode({
+            'usuario_id': id,
+            'veiculo_id': veiculoId,
+            'tipo': tipo,
+            'marca': marca,
+            'modelo': modelo,
+            'ano': ano,
+            'placa': placa,
+            'cor': cor,
+          }),
+        )
+        .timeout(
+          const Duration(seconds: 10),
+        );
+
+    return _decodificarResposta(response);
+  }
+
+  // ============================================================
+  // DEFINIR VEÍCULO PADRÃO
+  // ============================================================
+
+  Future<Map<String, dynamic>> definirVeiculoPadrao(
+    int veiculoId,
+  ) async {
+    final id = _usuarioId;
+
+    if (id == null) {
+      throw ApiException(
+        'Usuário não identificado. Faça login novamente.',
+      );
+    }
+
+    if (_tipoUsuario != 'cliente') {
+      throw ApiException(
+        'Somente clientes podem definir veículo padrão.',
+      );
+    }
+
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/definir_veiculo_padrao.php'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: jsonEncode({
+            'usuario_id': id,
+            'veiculo_id': veiculoId,
+          }),
+        )
+        .timeout(
+          const Duration(seconds: 10),
+        );
+
+    return _decodificarResposta(response);
+  }
+
+  // ============================================================
+  // HISTÓRICO DO CLIENTE
+  // ============================================================
+
+  Future<List<Map<String, dynamic>>> listarHistorico() async {
+    final id = _usuarioId;
+
+    if (id == null) {
+      throw ApiException(
+        'Usuário não identificado. Faça login novamente.',
+      );
+    }
+
+    if (_tipoUsuario != 'cliente') {
+      throw ApiException(
+        'Somente clientes possuem histórico de resgates.',
+      );
+    }
+
+    final response = await http
+        .get(
+          Uri.parse(
+            '$baseUrl/listar_historico.php?cliente_id=$id',
+          ),
+          headers: const {
+            'Accept': 'application/json',
+          },
+        )
+        .timeout(
+          const Duration(seconds: 10),
+        );
+
+    final dados = await _decodificarResposta(response);
+    final lista = dados['historico'];
+
+    if (lista is! List) {
+      return [];
+    }
+
+    return lista
+        .map(
+          (item) => Map<String, dynamic>.from(
+            item as Map,
+          ),
+        )
+        .toList();
+  }
+
+  // ============================================================
+// EXCLUIR VEÍCULO
+// ============================================================
+
+Future<Map<String, dynamic>> excluirVeiculo(
+  int veiculoId,
+) async {
+  final id = _usuarioId;
+
+  if (id == null) {
+    throw ApiException(
+      'Usuário não identificado. Faça login novamente.',
+    );
+  }
+
+  if (_tipoUsuario != 'cliente') {
+    throw ApiException(
+      'Somente clientes podem excluir veículos.',
+    );
+  }
+
+  final response = await http
+      .post(
+        Uri.parse(
+          '$baseUrl/excluir_veiculo.php',
+        ),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({
+          'usuario_id': id,
+          'veiculo_id': veiculoId,
+        }),
+      )
+      .timeout(
+        const Duration(seconds: 10),
+      );
+
+  return _decodificarResposta(response);
+}
+
+  // ============================================================
+  // FORMA DE PAGAMENTO PADRÃO
+  // ============================================================
+
+  Future<Map<String, dynamic>> atualizarFormaPagamento(
+    String formaPagamento,
+  ) async {
+    final id = _usuarioId;
+
+    if (id == null) {
+      throw ApiException(
+        'Usuário não identificado. Faça login novamente.',
+      );
+    }
+
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/atualizar_forma_pagamento.php'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: jsonEncode({
+            'usuario_id': id,
+            'forma_pagamento': formaPagamento,
+          }),
+        )
+        .timeout(
+          const Duration(seconds: 10),
+        );
+
+    final dados = await _decodificarResposta(response);
+
+    _formaPagamentoPadrao =
+        dados['forma_pagamento']?.toString() ?? formaPagamento;
+
+    return dados;
+  }
+
+  // ============================================================
+  // EXCLUIR CONTA
+  // ============================================================
+
+  /// Exclui a conta do usuário logado (pede a senha) e já faz logout.
+  Future<Map<String, dynamic>> excluirConta({
+    required String senha,
+  }) async {
+    final id = _usuarioId;
+
+    if (id == null) {
+      throw ApiException(
+        'Usuário não identificado. Faça login novamente.',
+      );
+    }
+
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/excluir_conta.php'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: jsonEncode({
+            'usuario_id': id,
+            'senha': senha,
+          }),
+        )
+        .timeout(
+          const Duration(seconds: 10),
+        );
+
+    final dados = await _decodificarResposta(response);
+
+    logout();
+
+    return dados;
+  }
+
+  // ============================================================
+  // ENDEREÇOS SALVOS
+  // ============================================================
+
+  Future<List<Map<String, dynamic>>> listarEnderecos() async {
+    final id = _usuarioId;
+
+    if (id == null) {
+      throw ApiException(
+        'Usuário não identificado. Faça login novamente.',
+      );
+    }
+
+    final response = await http
+        .get(
+          Uri.parse('$baseUrl/listar_enderecos.php?usuario_id=$id'),
+          headers: const {
+            'Accept': 'application/json',
+          },
+        )
+        .timeout(
+          const Duration(seconds: 10),
+        );
+
+    final dados = await _decodificarResposta(response);
+    final lista = dados['enderecos'];
+
+    if (lista is! List) {
+      return [];
+    }
+
+    return lista
+        .map(
+          (item) => Map<String, dynamic>.from(item as Map),
+        )
+        .toList();
+  }
+
+  Future<Map<String, dynamic>> adicionarEndereco({
+    required String apelido,
+    required String endereco,
+    required double latitude,
+    required double longitude,
+  }) async {
+    final id = _usuarioId;
+
+    if (id == null) {
+      throw ApiException(
+        'Usuário não identificado. Faça login novamente.',
+      );
+    }
+
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/adicionar_endereco.php'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: jsonEncode({
+            'usuario_id': id,
+            'apelido': apelido,
+            'endereco': endereco,
+            'latitude': latitude,
+            'longitude': longitude,
+          }),
+        )
+        .timeout(
+          const Duration(seconds: 10),
+        );
+
+    return _decodificarResposta(response);
+  }
+
+  Future<Map<String, dynamic>> excluirEndereco(
+    int enderecoId,
+  ) async {
+    final id = _usuarioId;
+
+    if (id == null) {
+      throw ApiException(
+        'Usuário não identificado. Faça login novamente.',
+      );
+    }
+
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/excluir_endereco.php'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: jsonEncode({
+            'usuario_id': id,
+            'endereco_id': enderecoId,
+          }),
+        )
+        .timeout(
+          const Duration(seconds: 10),
+        );
+
+    return _decodificarResposta(response);
+  }
+
+  // ============================================================
+  // GANHOS DO MOTORISTA
+  // ============================================================
+
+  /// Totais e atendimentos concluídos do motorista logado.
+  Future<Map<String, dynamic>> listarGanhos() async {
+    final id = _usuarioId;
+
+    if (id == null) {
+      throw ApiException(
+        'Motorista não identificado.',
+      );
+    }
+
+    final response = await http
+        .get(
+          Uri.parse('$baseUrl/listar_ganhos.php?motorista_id=$id'),
+          headers: const {
+            'Accept': 'application/json',
+          },
+        )
+        .timeout(
+          const Duration(seconds: 10),
+        );
+
+    return _decodificarResposta(response);
+  }
+
+  // ============================================================
+  // RESPOSTA
+  // ============================================================
+
+  Future<Map<String, dynamic>>
+      _decodificarResposta(
+    http.Response response,
+  ) async {
+    Map<String, dynamic>
+        dados;
+
+    try {
+      final decoded =
+          jsonDecode(
+        response.body,
+      );
+
+      if (decoded is! Map) {
+        throw const FormatException();
+      }
+
+      dados =
+          Map<String, dynamic>.from(
+        decoded,
+      );
+    } catch (_) {
+      throw ApiException(
+        'Resposta inválida do servidor: ${response.body}',
+        statusCode:
+            response.statusCode,
+      );
+    }
+
+    if (response.statusCode < 200 ||
+        response.statusCode >= 300) {
+      throw ApiException(
+        dados['mensagem']
+                ?.toString() ??
+            'Erro do servidor.',
+        statusCode:
+            response.statusCode,
+      );
+    }
+
+    if (dados['sucesso'] ==
+        false) {
+      throw ApiException(
+        dados['mensagem']
+                ?.toString() ??
+            'Não foi possível realizar a operação.',
+        statusCode:
+            response.statusCode,
+      );
+    }
+
+    return dados;
+  }
+
+  int? _paraInt(
+    dynamic valor,
+  ) {
+    if (valor == null) {
+      return null;
+    }
+
+    if (valor is int) {
+      return valor;
+    }
+
+    return int.tryParse(
+      valor.toString(),
+    );
+  }
+}

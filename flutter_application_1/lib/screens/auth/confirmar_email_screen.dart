@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'api_service.dart';
+import 'package:flutter_application_1/controllers/auth_controller.dart';
+import 'package:flutter_application_1/models/api_exception.dart';
+
 
 class ConfirmarEmailScreen
     extends StatefulWidget {
@@ -59,8 +61,7 @@ class _ConfirmarEmailScreenState
 
     try {
       final resposta =
-          await ApiService.instance
-              .verificarEmail(
+          await AuthController.instance.verificarEmail(
         email: widget.email,
         codigo: codigo,
       );
@@ -157,8 +158,7 @@ class _ConfirmarEmailScreenState
 
     try {
       final resposta =
-          await ApiService.instance
-              .reenviarCodigoVerificacao(
+          await AuthController.instance.reenviarCodigoVerificacao(
         email: widget.email,
       );
 
