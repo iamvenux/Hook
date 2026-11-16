@@ -4,7 +4,7 @@ $host = "localhost";
 $usuario = "root";
 $senha = "";
 $banco = "hook_db";
-$porta = 3306;
+$porta = 3307;
 
 $conn = new mysqli(
     $host,

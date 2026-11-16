@@ -40,7 +40,8 @@ $statusesPermitidos = [
     'a_caminho',
     'no_local',
     'em_atendimento',
-    'concluido'
+    'concluido',
+    'cancelado'
 ];
 
 if ($solicitacaoId <= 0 ||
@@ -120,6 +121,20 @@ $ordem = [
 
 $statusAtual = $solicitacao['status'];
 
+// O motorista pode cancelar enquanto o atendimento não terminou.
+if ($status === 'cancelado' &&
+    in_array($statusAtual, ['concluido', 'cancelado'], true)) {
+
+    http_response_code(409);
+
+    echo json_encode([
+        'sucesso' => false,
+        'mensagem' => 'Este atendimento já foi encerrado.'
+    ]);
+
+    exit;
+}
+
 if ($statusAtual !== 'cancelado' &&
     isset($ordem[$statusAtual]) &&
     isset($ordem[$status]) &&
@@ -155,6 +170,29 @@ $stmt->execute([
     $solicitacaoId,
     $motoristaId
 ]);
+
+
+/*
+|--------------------------------------------------------------------------
+| Corrida concluída: motorista volta a ficar disponível
+|--------------------------------------------------------------------------
+| Sem isso, "disponivel" fica em 0 pra sempre depois da primeira
+| corrida aceita, e o motorista nunca mais aparece pra novos
+| chamados mesmo reabrindo o app.
+*/
+
+if ($status === 'concluido' || $status === 'cancelado') {
+    $stmt = $pdo->prepare(
+        "UPDATE usuarios
+         SET disponivel = 1
+         WHERE id = ?
+           AND tipo = 'motorista'"
+    );
+
+    $stmt->execute([
+        $motoristaId
+    ]);
+}
 
 
 echo json_encode([

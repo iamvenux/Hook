@@ -8,11 +8,12 @@
     <application
         android:label="flutter_application_1"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true">
 
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="SUA_CHAVE_DO_GOOGLE_MAPS"/>
+            android:value="AIzaSyB_sdStbMN4wCg7LkLKDhAvRBJPrEMHuIk"/>
 
         <activity
             android:name=".MainActivity"

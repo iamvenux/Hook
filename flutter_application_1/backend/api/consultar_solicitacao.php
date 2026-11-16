@@ -4,6 +4,9 @@ header("Content-Type: application/json; charset=UTF-8");
 
 require_once __DIR__ . "/../cors.php";
 require_once __DIR__ . "/../conexao.php";
+require_once __DIR__ . "/../helpers/colunas_perfil.php";
+
+garantirColunasPerfil($conn);
 
 if ($_SERVER["REQUEST_METHOD"] !== "GET") {
     http_response_code(405);
@@ -48,6 +51,7 @@ $sql = "
         s.updated_at,
 
         u.nome AS motorista_nome,
+        u.foto_url AS motorista_foto,
         u.telefone AS motorista_telefone,
         u.placa_guincho AS motorista_placa,
         u.latitude_atual AS motorista_latitude,
@@ -125,6 +129,7 @@ if ($s["motorista_id"] !== null) {
     $motorista = [
         "id" => intval($s["motorista_id"]),
         "nome" => $s["motorista_nome"],
+        "foto_url" => $s["motorista_foto"],
         "telefone" => $s["motorista_telefone"],
         "placa" => $s["motorista_placa"],
         "latitude" => $s["motorista_latitude"] !== null

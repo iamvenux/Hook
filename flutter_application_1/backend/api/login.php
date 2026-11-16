@@ -4,6 +4,9 @@ header("Content-Type: application/json; charset=UTF-8");
 
 require_once __DIR__ . "/../cors.php";
 require_once __DIR__ . "/../conexao.php";
+require_once __DIR__ . "/../helpers/colunas_perfil.php";
+
+garantirColunasPerfil($conn);
 
 if ($_SERVER["REQUEST_METHOD"] !== "POST") {
     http_response_code(405);
@@ -65,9 +68,8 @@ $stmt = $conn->prepare("
         tipo,
         telefone,
         placa_guincho,
-        tipo_guincho,
-        forma_pagamento_padrao,
         disponivel,
+        foto_url,
         api_token
     FROM usuarios
     WHERE email = ?
@@ -136,9 +138,8 @@ echo json_encode([
         "tipo" => $usuario["tipo"],
         "telefone" => $usuario["telefone"],
         "placa_guincho" => $usuario["placa_guincho"],
-        "tipo_guincho" => $usuario["tipo_guincho"],
-        "forma_pagamento_padrao" => $usuario["forma_pagamento_padrao"],
         "disponivel" => intval($usuario["disponivel"]),
+        "foto_url" => $usuario["foto_url"],
         "api_token" => $usuario["api_token"]
     ]
 ], JSON_UNESCAPED_UNICODE);

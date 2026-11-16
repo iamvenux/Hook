@@ -5,7 +5,8 @@ header("Content-Type: application/json; charset=UTF-8");
 require_once __DIR__ . "/../cors.php";
 require_once __DIR__ . "/../conexao.php";
 
-if ($_SERVER["REQUEST_METHOD"] !== "POST") {
+if ($_SERVER["REQUEST_METHOD"] !== "POST" &&
+    $_SERVER["REQUEST_METHOD"] !== "PUT") {
     http_response_code(405);
 
     echo json_encode([
@@ -32,44 +33,43 @@ if (!is_array($dados)) {
     exit;
 }
 
-$usuarioId = intval(
-    $dados["usuario_id"] ?? 0
-);
+// ============================================================
+// DADOS RECEBIDOS
+// ============================================================
 
-$nome = trim(
-    $dados["nome"] ?? ""
-);
+$usuarioId = intval($dados["usuario_id"] ?? 0);
 
+$nome = trim($dados["nome"] ?? "");
+
+// Só dígitos, igual ao cadastro (criar_conta.php).
 $telefone = preg_replace(
-    '/\D/',
-    '',
-    $dados["telefone"] ?? ""
+    "/\\D/",
+    "",
+    (string)($dados["telefone"] ?? "")
 );
 
-$placaGuincho = strtoupper(
-    preg_replace(
-        '/[^A-Za-z0-9]/',
-        '',
-        $dados["placa_guincho"] ?? ""
-    )
-);
+// O e-mail NÃO é alterado aqui: a troca exige código enviado ao novo
+// endereço (solicitar_troca_email.php + confirmar_troca_email.php).
+$email = "";
 
-$tipoGuincho = trim(
-    $dados["tipo_guincho"] ?? ""
-);
+// Troca de senha é opcional: só é feita se o cliente mandar
+// os dois campos preenchidos.
+$senhaAtual = trim($dados["senha_atual"] ?? "");
+$novaSenha  = trim($dados["nova_senha"] ?? "");
 
-/*
-|--------------------------------------------------------------------------
-| VALIDAÇÕES
-|--------------------------------------------------------------------------
-*/
+$querTrocarSenha =
+    $senhaAtual !== "" || $novaSenha !== "";
+
+// ============================================================
+// VALIDAÇÃO
+// ============================================================
 
 if ($usuarioId <= 0) {
     http_response_code(400);
 
     echo json_encode([
         "sucesso" => false,
-        "mensagem" => "Usuário inválido."
+        "mensagem" => "usuario_id inválido."
     ]);
 
     exit;
@@ -80,36 +80,102 @@ if ($nome === "") {
 
     echo json_encode([
         "sucesso" => false,
-        "mensagem" => "Informe seu nome."
+        "mensagem" => "O nome não pode ficar em branco."
     ]);
 
     exit;
 }
 
-if (strlen($telefone) !== 11) {
+if (mb_strlen($nome) > 150) {
     http_response_code(400);
 
     echo json_encode([
         "sucesso" => false,
-        "mensagem" => "Informe um celular válido."
+        "mensagem" => "Nome muito longo."
     ]);
 
     exit;
 }
 
-// Descobre o tipo do usuário para saber quais campos aceitar.
-$stmt = $conn->prepare("
-    SELECT tipo
-    FROM usuarios
-    WHERE id = ?
-    LIMIT 1
-");
+if ($telefone !== "" &&
+    (strlen($telefone) < 10 || strlen($telefone) > 11)) {
+    http_response_code(400);
 
-$stmt->bind_param(
-    "i",
-    $usuarioId
+    echo json_encode([
+        "sucesso" => false,
+        "mensagem" => "Informe um telefone válido com DDD."
+    ]);
+
+    exit;
+}
+
+if ($email !== "" && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    http_response_code(400);
+
+    echo json_encode([
+        "sucesso" => false,
+        "mensagem" => "E-mail inválido."
+    ]);
+
+    exit;
+}
+
+if ($querTrocarSenha) {
+    if ($senhaAtual === "" || $novaSenha === "") {
+        http_response_code(400);
+
+        echo json_encode([
+            "sucesso" => false,
+            "mensagem" => "Para trocar a senha, informe a senha atual e a nova senha."
+        ]);
+
+        exit;
+    }
+
+    if (mb_strlen($novaSenha) < 6) {
+        http_response_code(400);
+
+        echo json_encode([
+            "sucesso" => false,
+            "mensagem" => "A nova senha deve possuir pelo menos 6 caracteres."
+        ]);
+
+        exit;
+    }
+
+    // bcrypt ignora tudo depois de 72 bytes.
+    if (strlen($novaSenha) > 72) {
+        http_response_code(400);
+
+        echo json_encode([
+            "sucesso" => false,
+            "mensagem" => "A nova senha pode ter no máximo 72 caracteres."
+        ]);
+
+        exit;
+    }
+
+    if ($novaSenha === $senhaAtual) {
+        http_response_code(400);
+
+        echo json_encode([
+            "sucesso" => false,
+            "mensagem" => "A nova senha deve ser diferente da atual."
+        ]);
+
+        exit;
+    }
+}
+
+// ============================================================
+// BUSCA USUÁRIO
+// ============================================================
+
+$stmt = $conn->prepare(
+    "SELECT id, email, senha_hash FROM usuarios WHERE id = ? LIMIT 1"
 );
 
+$stmt->bind_param("i", $usuarioId);
 $stmt->execute();
 
 $resultado = $stmt->get_result();
@@ -125,123 +191,107 @@ if ($resultado->num_rows === 0) {
     exit;
 }
 
-$tipo = $resultado->fetch_assoc()["tipo"];
+$usuario = $resultado->fetch_assoc();
 
-if ($tipo === "motorista") {
-    if (strlen($placaGuincho) !== 7) {
-        http_response_code(400);
+// ============================================================
+// SE FOR TROCAR SENHA, CONFERE A SENHA ATUAL
+// ============================================================
+
+$novoHash = null;
+
+if ($querTrocarSenha) {
+    if (!password_verify($senhaAtual, $usuario["senha_hash"])) {
+        http_response_code(403);
 
         echo json_encode([
             "sucesso" => false,
-            "mensagem" => "Informe uma placa de guincho válida."
+            "mensagem" => "Senha atual incorreta."
         ]);
 
         exit;
     }
 
-    if (
-        $tipoGuincho !== "Leve" &&
-        $tipoGuincho !== "Pesado"
-    ) {
-        http_response_code(400);
+    $novoHash = password_hash($novaSenha, PASSWORD_DEFAULT);
+}
+
+// ============================================================
+// E-MAIL: NÃO PODE ESTAR EM USO POR OUTRA CONTA
+// ============================================================
+
+if ($email !== "") {
+    $stmt = $conn->prepare(
+        "SELECT id FROM usuarios WHERE email = ? AND id <> ? LIMIT 1"
+    );
+
+    $stmt->bind_param("si", $email, $usuarioId);
+    $stmt->execute();
+
+    if ($stmt->get_result()->num_rows > 0) {
+        http_response_code(409);
 
         echo json_encode([
             "sucesso" => false,
-            "mensagem" => "Selecione um tipo de guincho válido."
+            "mensagem" => "Este e-mail já está em uso por outra conta."
         ]);
 
         exit;
     }
 }
 
-/*
-|--------------------------------------------------------------------------
-| ATUALIZA
-|--------------------------------------------------------------------------
-*/
+// ============================================================
+// ATUALIZA
+// ============================================================
 
-if ($tipo === "motorista") {
-    $stmt = $conn->prepare("
-        UPDATE usuarios
-        SET
-            nome = ?,
-            telefone = ?,
-            placa_guincho = ?,
-            tipo_guincho = ?
-        WHERE id = ?
-    ");
+$campos = ["nome = ?", "telefone = ?"];
+$tipos = "ss";
+$valores = [$nome, $telefone];
 
-    $stmt->bind_param(
-        "ssssi",
-        $nome,
-        $telefone,
-        $placaGuincho,
-        $tipoGuincho,
-        $usuarioId
-    );
-} else {
-    // Cliente não tem guincho: não mexe nesses campos.
-    $stmt = $conn->prepare("
-        UPDATE usuarios
-        SET
-            nome = ?,
-            telefone = ?
-        WHERE id = ?
-    ");
-
-    $stmt->bind_param(
-        "ssi",
-        $nome,
-        $telefone,
-        $usuarioId
-    );
+if ($novoHash !== null) {
+    $campos[] = "senha_hash = ?";
+    $tipos .= "s";
+    $valores[] = $novoHash;
 }
+
+if ($email !== "") {
+    $campos[] = "email = ?";
+    $tipos .= "s";
+    $valores[] = $email;
+}
+
+$tipos .= "i";
+$valores[] = $usuarioId;
+
+$stmt = $conn->prepare(
+    "UPDATE usuarios SET " . implode(", ", $campos) . " WHERE id = ?"
+);
+
+$stmt->bind_param($tipos, ...$valores);
 
 if (!$stmt->execute()) {
     http_response_code(500);
 
     echo json_encode([
         "sucesso" => false,
-        "mensagem" => "Erro ao atualizar os dados."
+        "mensagem" => "Erro ao atualizar perfil.",
+        "erro" => $stmt->error
     ]);
 
     exit;
 }
 
-// Devolve os dados já salvos, para o app atualizar a tela.
-$stmt = $conn->prepare("
-    SELECT
-        id,
-        nome,
-        email,
-        tipo,
-        telefone,
-        placa_guincho,
-        tipo_guincho
-    FROM usuarios
-    WHERE id = ?
-    LIMIT 1
-");
-
-$stmt->bind_param(
-    "i",
-    $usuarioId
-);
-
-$stmt->execute();
-
-$usuario = $stmt->get_result()->fetch_assoc();
+// ============================================================
+// RESPOSTA
+// ============================================================
 
 echo json_encode([
     "sucesso" => true,
-    "mensagem" => "Dados atualizados com sucesso.",
+    "mensagem" => $querTrocarSenha
+        ? "Perfil e senha atualizados com sucesso."
+        : "Perfil atualizado com sucesso.",
     "usuario" => [
-        "id" => intval($usuario["id"]),
-        "nome" => $usuario["nome"],
-        "email" => $usuario["email"],
-        "tipo" => $usuario["tipo"],
-        "telefone" => $usuario["telefone"],
-        "placa_guincho" => $usuario["placa_guincho"],
-        "tipo_guincho" => $usuario["tipo_guincho"]
+        "id" => $usuarioId,
+        "nome" => $nome,
+        "telefone" => $telefone,
+        "email" => $email !== "" ? $email : $usuario["email"]
     ]
 ], JSON_UNESCAPED_UNICODE);

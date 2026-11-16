@@ -118,6 +118,42 @@ if ($stmt->rowCount() === 0) {
 }
 
 
+/*
+|--------------------------------------------------------------------------
+| Se já havia um motorista aceito, ele volta a ficar disponível
+|--------------------------------------------------------------------------
+| Mesma lógica de atualizar_status.php ao concluir: sem isso, um
+| cancelamento depois do aceite deixava o motorista com
+| disponivel = 0 pra sempre.
+*/
+
+$stmt = $pdo->prepare(
+    "SELECT motorista_id
+     FROM solicitacoes
+     WHERE id = ?
+     LIMIT 1"
+);
+
+$stmt->execute([
+    $solicitacaoId
+]);
+
+$motoristaId = $stmt->fetchColumn();
+
+if ($motoristaId) {
+    $stmt = $pdo->prepare(
+        "UPDATE usuarios
+         SET disponivel = 1
+         WHERE id = ?
+           AND tipo = 'motorista'"
+    );
+
+    $stmt->execute([
+        $motoristaId
+    ]);
+}
+
+
 echo json_encode([
     'sucesso' => true,
     'mensagem' => 'Solicitação cancelada com sucesso.',

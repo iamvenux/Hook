@@ -71,8 +71,9 @@ $latitude =
 $longitude =
     $dados["longitude"] ?? null;
 
-$valorEstimado =
-    $dados["valor_estimado"] ?? null;
+// valor_estimado NUNCA vem do cliente — é sempre calculado
+// pelo servidor logo abaixo (ver bloco "PREÇO DINÂMICO").
+// Isso evita que o app envie um preço manipulado.
 
 
 // ============================================================
@@ -208,19 +209,107 @@ $longitude =
 
 
 // ============================================================
-// VALOR ESTIMADO
+// PREÇO DINÂMICO (base + por km até o motorista mais próximo)
 // ============================================================
+//
+// Regra: valor = valor_base(tipo) + distancia_km * valor_por_km,
+// com um piso mínimo por tipo (pra nunca cobrar menos que isso,
+// mesmo se o motorista estiver muito perto).
+//
+// distancia_km = distância (Haversine) entre o ponto do cliente
+// e o motorista DISPONÍVEL mais próximo no momento do pedido.
+// Se nenhum motorista estiver disponível/com localização salva,
+// usa uma distância padrão (fallback) pra não travar o pedido —
+// o valor final é recalculado de qualquer forma quando um
+// motorista realmente aceitar (ver aceitar_solicitacao.php).
 
-if ($valorEstimado === null) {
-    if ($tipoReboque === "Guincho Leve") {
-        $valorEstimado = 350.00;
-    } else {
-        $valorEstimado = 550.00;
+function haversineKm(
+    float $lat1,
+    float $lon1,
+    float $lat2,
+    float $lon2
+): float {
+    $raioTerraKm = 6371.0;
+
+    $dLat = deg2rad($lat2 - $lat1);
+    $dLon = deg2rad($lon2 - $lon1);
+
+    $a = sin($dLat / 2) ** 2
+        + cos(deg2rad($lat1))
+        * cos(deg2rad($lat2))
+        * sin($dLon / 2) ** 2;
+
+    $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
+
+    return $raioTerraKm * $c;
+}
+
+const PRECOS_REBOQUE = [
+    "Guincho Leve" => [
+        "base"     => 80.00,
+        "por_km"   => 3.50,
+        "minimo"   => 150.00,
+    ],
+    "Guincho Pesado" => [
+        "base"     => 150.00,
+        "por_km"   => 5.50,
+        "minimo"   => 280.00,
+    ],
+];
+
+const DISTANCIA_PADRAO_KM = 12.0;
+
+$config = PRECOS_REBOQUE[$tipoReboque];
+
+// Busca motoristas online com localização salva.
+$stmt = $conn->prepare("
+    SELECT
+        latitude_atual,
+        longitude_atual
+    FROM usuarios
+    WHERE tipo = 'motorista'
+      AND disponivel = 1
+      AND latitude_atual IS NOT NULL
+      AND longitude_atual IS NOT NULL
+");
+
+$stmt->execute();
+
+$resultadoMotoristas =
+    $stmt->get_result();
+
+$menorDistanciaKm = null;
+
+while ($m = $resultadoMotoristas->fetch_assoc()) {
+    $distancia = haversineKm(
+        $latitude,
+        $longitude,
+        floatval($m["latitude_atual"]),
+        floatval($m["longitude_atual"])
+    );
+
+    if (
+        $menorDistanciaKm === null ||
+        $distancia < $menorDistanciaKm
+    ) {
+        $menorDistanciaKm = $distancia;
     }
 }
 
+$usouDistanciaPadrao = $menorDistanciaKm === null;
+
+$distanciaKm =
+    $menorDistanciaKm ?? DISTANCIA_PADRAO_KM;
+
 $valorEstimado =
-    floatval($valorEstimado);
+    $config["base"] + ($distanciaKm * $config["por_km"]);
+
+if ($valorEstimado < $config["minimo"]) {
+    $valorEstimado = $config["minimo"];
+}
+
+// Arredonda pra centavos.
+$valorEstimado = round($valorEstimado, 2);
 
 
 // ============================================================

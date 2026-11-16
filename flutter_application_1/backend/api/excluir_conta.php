@@ -10,214 +10,227 @@ require_once __DIR__ . "/../conexao.php";
 | EXCLUSÃO DE CONTA
 |--------------------------------------------------------------------------
 |
-| As solicitações referenciam o usuário (cliente e motorista) sem
-| ON DELETE CASCADE, e o histórico da outra parte precisa continuar
-| existindo. Por isso a conta não é apagada fisicamente: os dados
-| pessoais são anonimizados, o login deixa de funcionar e os
-| veículos/endereços são removidos.
+| As solicitações apontam para o cliente e para o motorista, e o
+| histórico da outra parte precisa continuar existindo. Por isso a linha
+| não é apagada: os dados pessoais são anonimizados, o login deixa de
+| funcionar, os veículos saem da lista e a foto é removida do servidor.
 |
 */
 
-if ($_SERVER["REQUEST_METHOD"] !== "POST") {
-    http_response_code(405);
+function responder($codigo, $sucesso, $mensagem) {
+    http_response_code($codigo);
 
-    echo json_encode([
-        "sucesso" => false,
-        "mensagem" => "Método não permitido."
-    ]);
+    echo json_encode(
+        ["sucesso" => $sucesso, "mensagem" => $mensagem],
+        JSON_UNESCAPED_UNICODE
+    );
 
     exit;
 }
 
-$dados = json_decode(
-    file_get_contents("php://input"),
-    true
-);
+if ($_SERVER["REQUEST_METHOD"] !== "POST") {
+    responder(405, false, "Método não permitido.");
+}
+
+$dados = json_decode(file_get_contents("php://input"), true);
 
 if (!is_array($dados)) {
-    http_response_code(400);
-
-    echo json_encode([
-        "sucesso" => false,
-        "mensagem" => "JSON inválido."
-    ]);
-
-    exit;
+    responder(400, false, "JSON inválido.");
 }
 
-$usuarioId = intval(
-    $dados["usuario_id"] ?? 0
-);
-
-$senha = $dados["senha"] ?? "";
+$usuarioId = intval($dados["usuario_id"] ?? 0);
+$senha     = (string)($dados["senha"] ?? "");
 
 if ($usuarioId <= 0 || $senha === "") {
-    http_response_code(400);
-
-    echo json_encode([
-        "sucesso" => false,
-        "mensagem" => "Informe sua senha para excluir a conta."
-    ]);
-
-    exit;
+    responder(400, false, "Informe sua senha para excluir a conta.");
 }
 
-$stmt = $conn->prepare("
-    SELECT
-        id,
-        senha_hash,
-        tipo
-    FROM usuarios
-    WHERE id = ?
-    LIMIT 1
-");
+// ============================================================
+// CONFERE A SENHA
+// ============================================================
 
-$stmt->bind_param(
-    "i",
-    $usuarioId
+$stmt = $conn->prepare(
+    "SELECT id, senha_hash, tipo FROM usuarios WHERE id = ? LIMIT 1"
 );
 
+$stmt->bind_param("i", $usuarioId);
 $stmt->execute();
 
-$resultado = $stmt->get_result();
+$usuario = $stmt->get_result()->fetch_assoc();
 
-if ($resultado->num_rows === 0) {
-    http_response_code(404);
-
-    echo json_encode([
-        "sucesso" => false,
-        "mensagem" => "Usuário não encontrado."
-    ]);
-
-    exit;
+if (!$usuario) {
+    responder(404, false, "Usuário não encontrado.");
 }
 
-$usuario = $resultado->fetch_assoc();
-
-if (!password_verify(
-    $senha,
-    $usuario["senha_hash"]
-)) {
-    http_response_code(401);
-
-    echo json_encode([
-        "sucesso" => false,
-        "mensagem" => "Senha incorreta."
-    ]);
-
-    exit;
+if (!password_verify($senha, (string)$usuario["senha_hash"])) {
+    responder(401, false, "Senha incorreta.");
 }
+
+// ============================================================
+// COLUNAS QUE EXISTEM NESTE BANCO
+// ============================================================
+// O banco pode estar em versões diferentes (com ou sem foto, código de
+// verificação, etc.), então só limpamos as colunas que realmente existem.
+
+function colunasDaTabela(mysqli $conn, $tabela) {
+    $colunas = [];
+
+    $res = $conn->query("SHOW COLUMNS FROM `" . $tabela . "`");
+
+    if ($res) {
+        while ($linha = $res->fetch_assoc()) {
+            $colunas[$linha["Field"]] = true;
+        }
+    }
+
+    return $colunas;
+}
+
+function tabelaExiste(mysqli $conn, $tabela) {
+    $res = $conn->query("SHOW TABLES LIKE '" . $conn->real_escape_string($tabela) . "'");
+
+    return $res && $res->num_rows > 0;
+}
+
+$colunas = colunasDaTabela($conn, "usuarios");
+
+// Foto antiga: apagada do disco depois que o banco for atualizado.
+$fotoAntiga = null;
+
+if (isset($colunas["foto_url"])) {
+    $stmt = $conn->prepare("SELECT foto_url FROM usuarios WHERE id = ? LIMIT 1");
+    $stmt->bind_param("i", $usuarioId);
+    $stmt->execute();
+
+    $fotoAntiga = $stmt->get_result()->fetch_assoc()["foto_url"] ?? null;
+}
+
+// ============================================================
+// ANONIMIZA
+// ============================================================
 
 $conn->begin_transaction();
 
 try {
-    // E-mail único e inválido, para liberar o original para novo cadastro.
-    $emailAnonimo =
-        "excluido_" . $usuarioId . "_" . time() . "@hook.invalid";
+    // E-mail único e inválido: libera o e-mail original para novo cadastro.
+    $emailAnonimo = "excluido_" . $usuarioId . "_" . time() . "@hook.invalid";
 
-    // Senha aleatória: ninguém consegue mais entrar nesta conta.
+    // Senha aleatória: ninguém entra mais nesta conta.
     $senhaAnonima = password_hash(
         bin2hex(random_bytes(16)),
         PASSWORD_DEFAULT
     );
 
-    $stmt = $conn->prepare("
-        UPDATE usuarios
-        SET
-            nome = 'Conta excluída',
-            email = ?,
-            email_verificado = 0,
-            codigo_verificacao_hash = NULL,
-            codigo_verificacao_expira = NULL,
-            codigo_recuperacao_hash = NULL,
-            codigo_recuperacao_expira = NULL,
-            senha_hash = ?,
-            telefone = NULL,
-            placa_guincho = NULL,
-            tipo_guincho = NULL,
-            disponivel = 0,
-            latitude_atual = NULL,
-            longitude_atual = NULL,
-            api_token = NULL
-        WHERE id = ?
-    ");
+    $campos  = ["nome = ?", "email = ?", "senha_hash = ?"];
+    $tipos   = "sss";
+    $valores = ["Conta excluída", $emailAnonimo, $senhaAnonima];
 
-    $stmt->bind_param(
-        "ssi",
-        $emailAnonimo,
-        $senhaAnonima,
-        $usuarioId
+    // Colunas opcionais, limpas só se existirem nesta versão do banco.
+    $paraNulo = [
+        "telefone",
+        "foto_url",
+        "placa_guincho",
+        "tipo_guincho",
+        "latitude_atual",
+        "longitude_atual",
+        "api_token",
+        "codigo_verificacao_hash",
+        "codigo_verificacao_expira",
+        "codigo_recuperacao_hash",
+        "codigo_recuperacao_expira",
+        "email_pendente",
+        "email_pendente_hash",
+        "email_pendente_expira",
+    ];
+
+    foreach ($paraNulo as $coluna) {
+        if (isset($colunas[$coluna])) {
+            $campos[] = "`" . $coluna . "` = NULL";
+        }
+    }
+
+    foreach (["email_verificado", "disponivel", "email_pendente_tentativas"] as $coluna) {
+        if (isset($colunas[$coluna])) {
+            $campos[] = "`" . $coluna . "` = 0";
+        }
+    }
+
+    $tipos .= "i";
+    $valores[] = $usuarioId;
+
+    $stmt = $conn->prepare(
+        "UPDATE usuarios SET " . implode(", ", $campos) . " WHERE id = ?"
     );
+
+    $stmt->bind_param($tipos, ...$valores);
 
     if (!$stmt->execute()) {
         throw new RuntimeException($stmt->error);
     }
 
-    // Solicitações do cliente ainda em aberto são canceladas.
-    if ($usuario["tipo"] === "cliente") {
-        $stmt = $conn->prepare("
-            UPDATE solicitacoes
+    // Atendimentos em aberto são cancelados (dos dois lados).
+    $stmt = $conn->prepare(
+        "UPDATE solicitacoes
             SET status = 'cancelado'
-            WHERE cliente_id = ?
-              AND status NOT IN ('concluido', 'cancelado')
-        ");
+          WHERE (cliente_id = ? OR motorista_id = ?)
+            AND status NOT IN ('concluido', 'cancelado')"
+    );
 
-        $stmt->bind_param(
-            "i",
-            $usuarioId
-        );
+    $stmt->bind_param("ii", $usuarioId, $usuarioId);
+
+    if (!$stmt->execute()) {
+        throw new RuntimeException($stmt->error);
+    }
+
+    // Veículos saem da lista (exclusão lógica, como em excluir_veiculo.php).
+    $colunasVeiculos = colunasDaTabela($conn, "veiculos");
+
+    if (isset($colunasVeiculos["ativo"])) {
+        $sql = isset($colunasVeiculos["padrao"])
+            ? "UPDATE veiculos SET ativo = 0, padrao = 0 WHERE usuario_id = ?"
+            : "UPDATE veiculos SET ativo = 0 WHERE usuario_id = ?";
+
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("i", $usuarioId);
 
         if (!$stmt->execute()) {
             throw new RuntimeException($stmt->error);
         }
     }
 
-    // Veículos somem da lista (exclusão lógica, como em excluir_veiculo.php).
-    $stmt = $conn->prepare("
-        UPDATE veiculos
-        SET
-            ativo = 0,
-            padrao = 0
-        WHERE usuario_id = ?
-    ");
+    // Endereços salvos no banco, se este projeto já tiver a tabela.
+    if (tabelaExiste($conn, "enderecos")) {
+        $stmt = $conn->prepare("DELETE FROM enderecos WHERE usuario_id = ?");
+        $stmt->bind_param("i", $usuarioId);
 
-    $stmt->bind_param(
-        "i",
-        $usuarioId
-    );
-
-    if (!$stmt->execute()) {
-        throw new RuntimeException($stmt->error);
-    }
-
-    $stmt = $conn->prepare("
-        DELETE FROM enderecos
-        WHERE usuario_id = ?
-    ");
-
-    $stmt->bind_param(
-        "i",
-        $usuarioId
-    );
-
-    if (!$stmt->execute()) {
-        throw new RuntimeException($stmt->error);
+        if (!$stmt->execute()) {
+            throw new RuntimeException($stmt->error);
+        }
     }
 
     $conn->commit();
-
-    echo json_encode([
-        "sucesso" => true,
-        "mensagem" => "Conta excluída com sucesso."
-    ], JSON_UNESCAPED_UNICODE);
-
 } catch (Throwable $e) {
     $conn->rollback();
 
-    http_response_code(500);
+    error_log("excluir_conta: " . $e->getMessage());
 
-    echo json_encode([
-        "sucesso" => false,
-        "mensagem" => "Não foi possível excluir a conta."
-    ], JSON_UNESCAPED_UNICODE);
+    responder(500, false, "Não foi possível excluir a conta.");
 }
+
+// ============================================================
+// FOTO DE PERFIL NO SERVIDOR
+// ============================================================
+
+if (is_string($fotoAntiga) && $fotoAntiga !== "") {
+    $nome = basename($fotoAntiga);
+
+    if (preg_match('/^u\d+_[a-f0-9]{16}\.(jpg|png|webp)$/', $nome)) {
+        $caminho = __DIR__ . "/../uploads/perfil/" . $nome;
+
+        if (is_file($caminho)) {
+            @unlink($caminho);
+        }
+    }
+}
+
+responder(200, true, "Conta excluída. Sentiremos sua falta!");
